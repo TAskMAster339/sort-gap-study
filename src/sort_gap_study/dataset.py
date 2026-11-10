@@ -1,5 +1,6 @@
 """Чтение и аудит входных файлов KITTI Tracking."""
 
+import math
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from sort_gap_study.config import SequenceSplit
 
 SEQMAP_FIELDS = 4
 GT_FIELDS = 17
+REGIONLET_FIELDS = 18
 DETECTION_COLUMNS = 5
 
 
@@ -71,6 +73,46 @@ def read_gt_detections(path: Path, frames: range) -> dict[int, NDArray[np.float6
         if track_id >= 0 and _valid_box(x1, y1, x2, y2):
             detections[frame].append([x1, y1, x2, y2, 1.0])
 
+    return _detection_arrays(detections)
+
+
+def read_regionlet_detections(
+    path: Path,
+    frames: range,
+    *,
+    score_threshold: float = 0.0,
+) -> dict[int, NDArray[np.float64]]:
+    """Вернуть наблюдения Car после фильтрации по исходной уверенности."""
+    if not math.isfinite(score_threshold):
+        message = "Порог уверенности Regionlet должен быть конечным числом."
+        raise ValueError(message)
+
+    detections: dict[int, list[list[float]]] = {frame: [] for frame in frames}
+    for frame, fields, line_number in _frame_records(path, frames):
+        if len(fields) < REGIONLET_FIELDS:
+            message = f"{path}:{line_number}: неполная строка Regionlet."
+            raise ValueError(message)
+        if fields[2] != "Car":
+            continue
+        try:
+            x1, y1, x2, y2 = map(float, fields[6:10])
+            score = float(fields[17])
+        except ValueError as error:
+            message = f"{path}:{line_number}: неверные координаты или score Regionlet."
+            raise ValueError(message) from error
+        if (
+            math.isfinite(score)
+            and score >= score_threshold
+            and _valid_box(x1, y1, x2, y2)
+        ):
+            detections[frame].append([x1, y1, x2, y2, 1.0])
+
+    return _detection_arrays(detections)
+
+
+def _detection_arrays(
+    detections: dict[int, list[list[float]]],
+) -> dict[int, NDArray[np.float64]]:
     return {
         frame: np.asarray(rows, dtype=np.float64).reshape(-1, DETECTION_COLUMNS)
         for frame, rows in detections.items()

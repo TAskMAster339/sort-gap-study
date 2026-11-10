@@ -2,7 +2,12 @@ import numpy as np
 import pytest
 
 from sort_gap_study.config import SequenceSplit
-from sort_gap_study.dataset import audit_inputs, read_gt_detections, read_seqmap
+from sort_gap_study.dataset import (
+    audit_inputs,
+    read_gt_detections,
+    read_regionlet_detections,
+    read_seqmap,
+)
 
 
 def test_seqmap_includes_last_frame(tmp_path):
@@ -85,3 +90,41 @@ def test_gt_detections_reject_frame_outside_sequence(tmp_path):
 
     with pytest.raises(ValueError, match=r"0000\.txt:1: кадр 3 вне диапазона"):
         read_gt_detections(path, range(3))
+
+
+def test_regionlet_filters_before_normalizing_score(tmp_path):
+    path = tmp_path / "0000.txt"
+    path.write_text(
+        "3 -1 Car -1 -1 -10 10 20 30 40 -1 -1 -1 -1000 -1000 -1000 -10 0.5\n"
+        "3 -1 Car -1 -1 -10 11 21 31 41 -1 -1 -1 -1000 -1000 -1000 -10 1.2\n"
+        "3 -1 Car -1 -1 -10 12 22 32 42 -1 -1 -1 -1000 -1000 -1000 -10 0.49\n"
+        "3 -1 Cyclist -1 -1 -10 1 2 3 4 -1 -1 -1 -1000 -1000 -1000 -10 2\n"
+        "4 -1 Car -1 -1 -10 10 20 10 40 -1 -1 -1 -1000 -1000 -1000 -10 2\n"
+        "4 -1 Car -1 -1 -10 10 20 30 nan -1 -1 -1 -1000 -1000 -1000 -10 2\n"
+        "4 -1 Car -1 -1 -10 10 20 30 40 -1 -1 -1 -1000 -1000 -1000 -10 inf\n",
+    )
+
+    detections = read_regionlet_detections(path, range(3, 6), score_threshold=0.5)
+
+    assert tuple(detections) == (3, 4, 5)
+    np.testing.assert_array_equal(
+        detections[3],
+        [[10, 20, 30, 40, 1], [11, 21, 31, 41, 1]],
+    )
+    assert detections[4].shape == detections[5].shape == (0, 5)
+
+
+@pytest.mark.parametrize(
+    ("suffix", "error"),
+    [
+        ("", "неполная строка"),
+        (" invalid", "неверные координаты или score"),
+    ],
+)
+def test_regionlet_rejects_malformed_score_field(tmp_path, suffix, error):
+    path = tmp_path / "0000.txt"
+    record = "0 -1 Car -1 -1 -10 1 2 3 4 -1 -1 -1 -1000 -1000 -1000 -10"
+    path.write_text(f"{record}{suffix}\n")
+
+    with pytest.raises(ValueError, match=rf"0000\.txt:1: {error}"):
+        read_regionlet_detections(path, range(1))

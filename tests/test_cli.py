@@ -16,3 +16,4 @@ def test_cli_help():
 
     assert "usage: sort-gap-study" in result.stdout
     assert "--help" in result.stdout
+    assert "audit-data" in result.stdout

@@ -1,0 +1,45 @@
+# Локальный план
+/PLAN.md
+
+# Данные, сторонние исходники и результаты
+/data/
+/downloads/
+/external/
+/runs/
+/outputs/
+/artifacts/
+/reports/
+*.zip
+*.tar
+*.tar.gz
+*.tar.xz
+*.7z
+
+# Python, uv и проверки
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+.coverage
+.coverage.*
+/htmlcov/
+/build/
+/dist/
+
+# Локальные настройки и временные файлы
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+*.swp
+*.swo
+*~

@@ -25,7 +25,8 @@ def load_split(path: Path) -> SequenceSplit:
     overlap = sorted(set(tune).intersection(evaluation))
     if overlap:
         raise ValueError(
-            f"Настроечные и итоговые последовательности пересекаются: {', '.join(overlap)}."
+            f"Настроечные и итоговые последовательности "
+            f"пересекаются: {', '.join(overlap)}.",
         )
 
     return SequenceSplit(tune=tune, evaluation=evaluation)

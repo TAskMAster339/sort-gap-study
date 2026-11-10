@@ -10,7 +10,6 @@ def test_load_project_split():
     split = load_split(path)
 
     assert split.tune == ("0000", "0002", "0005", "0009", "0011", "0017", "0019")
-    assert len(split.evaluation) == 14
     assert sorted(split.tune + split.evaluation) == [f"{i:04d}" for i in range(21)]
 
 

@@ -1,9 +1,13 @@
+import shutil
 import subprocess
 
 
 def test_cli_help():
-    result = subprocess.run(
-        ["sort-gap-study", "--help"],
+    executable = shutil.which("sort-gap-study")
+    assert executable is not None
+
+    result = subprocess.run(  # noqa: S603 — fixed entry point and arguments
+        [executable, "--help"],
         capture_output=True,
         text=True,
         encoding="utf-8",

@@ -1,10 +1,16 @@
-"""Аудит входных файлов KITTI Tracking."""
+"""Чтение и аудит входных файлов KITTI Tracking."""
 
+from collections.abc import Iterator
 from pathlib import Path
+
+import numpy as np
+from numpy.typing import NDArray
 
 from sort_gap_study.config import SequenceSplit
 
 SEQMAP_FIELDS = 4
+GT_FIELDS = 17
+DETECTION_COLUMNS = 5
 
 
 def read_seqmap(path: Path) -> dict[str, range]:
@@ -47,10 +53,46 @@ def audit_inputs(
             _audit_frames(directory / f"{sequence}.txt", ranges[sequence])
 
 
+def read_gt_detections(path: Path, frames: range) -> dict[int, NDArray[np.float64]]:
+    """Вернуть наблюдения Car по кадрам. Для оценки используется исходный файл GT."""
+    detections: dict[int, list[list[float]]] = {frame: [] for frame in frames}
+    for frame, fields, line_number in _frame_records(path, frames):
+        if len(fields) < GT_FIELDS:
+            message = f"{path}:{line_number}: неполная строка GT."
+            raise ValueError(message)
+        if fields[2] != "Car":
+            continue
+        try:
+            track_id = int(fields[1])
+            x1, y1, x2, y2 = map(float, fields[6:10])
+        except ValueError as error:
+            message = f"{path}:{line_number}: неверный ID или координаты GT."
+            raise ValueError(message) from error
+        if track_id >= 0 and _valid_box(x1, y1, x2, y2):
+            detections[frame].append([x1, y1, x2, y2, 1.0])
+
+    return {
+        frame: np.asarray(rows, dtype=np.float64).reshape(-1, DETECTION_COLUMNS)
+        for frame, rows in detections.items()
+    }
+
+
+def _valid_box(x1: float, y1: float, x2: float, y2: float) -> bool:
+    return bool(np.isfinite((x1, y1, x2, y2)).all()) and x1 < x2 and y1 < y2
+
+
 def _audit_frames(path: Path, frames: range) -> None:
+    for _ in _frame_records(path, frames):
+        pass
+
+
+def _frame_records(
+    path: Path,
+    frames: range,
+) -> Iterator[tuple[int, list[str], int]]:
     with path.open(encoding="utf-8") as source:
         for line_number, line in enumerate(source, start=1):
-            fields = line.split(maxsplit=1)
+            fields = line.split()
             if not fields:
                 continue
             frame = _read_frame(fields[0], path, line_number)
@@ -60,6 +102,7 @@ def _audit_frames(path: Path, frames: range) -> None:
                     f"{frames.start}..{frames.stop - 1}."
                 )
                 raise ValueError(message)
+            yield frame, fields, line_number
 
 
 def _read_frame(value: str, path: Path, line_number: int) -> int:

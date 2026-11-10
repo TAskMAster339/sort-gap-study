@@ -14,6 +14,9 @@ dependencies = [
     "scipy",
 ]
 
+[project.scripts]
+sort-gap-study = "sort_gap_study.cli:main"
+
 [dependency-groups]
 dev = ["pytest", "ruff"]
 

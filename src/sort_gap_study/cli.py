@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sort_gap_study.config import load_split
 from sort_gap_study.dataset import audit_inputs
+from sort_gap_study.evaluation import evaluate_sort
 from sort_gap_study.runner import MaskSpec, RunInputs, run_sort
 
 
@@ -39,6 +40,14 @@ def main() -> None:
     run.add_argument("--loss-fraction", type=float, default=0.0)
     run.add_argument("--seed", type=int, default=0)
     run.add_argument("--series-length", type=int, default=3)
+
+    evaluate = commands.add_parser(
+        "evaluate-sort",
+        help="Рассчитать метрики TrackEval для готового запуска SORT.",
+    )
+    evaluate.add_argument("--run", type=Path, required=True)
+    evaluate.add_argument("--ground-truth", type=Path, required=True)
+    evaluate.add_argument("--trackeval", type=Path, default=Path("external/TrackEval"))
     args = parser.parse_args()
 
     if args.command == "audit-data":
@@ -63,3 +72,9 @@ def main() -> None:
         except (OSError, TypeError, ValueError) as error:
             run.error(str(error))
         sys.stdout.write(f"Результаты SORT: {args.output}\n")
+    elif args.command == "evaluate-sort":
+        try:
+            metrics = evaluate_sort(args.run, args.ground_truth, args.trackeval)
+        except (ImportError, KeyError, OSError, TypeError, ValueError) as error:
+            evaluate.error(str(error))
+        sys.stdout.write(f"Метрики SORT: {metrics}\n")

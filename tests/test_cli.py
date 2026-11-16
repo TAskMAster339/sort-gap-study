@@ -20,6 +20,7 @@ def test_cli_help():
     assert "--help" in result.stdout
     assert "audit-data" in result.stdout
     assert "run-sort" in result.stdout
+    assert "evaluate-sort" in result.stdout
 
 
 def test_run_sort_exports_original_frames_and_events(tmp_path):

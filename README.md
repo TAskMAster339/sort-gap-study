@@ -24,3 +24,28 @@ uv run --locked sort-gap-study run-sort \
   указывает, была ли использована детекция на текущем кадре.
 - `mask.json`, `protocol.toml` и `manifest.json` сохраняют маску, копию
   настроек и сведения о входах и диапазоне кадров.
+
+## Оценка SORT в TrackEval
+
+Один раз подготовьте локальную копию TrackEval. Можно использовать существующий
+Git-репозиторий и передать его путь через `--trackeval`.
+
+```bash
+git clone --no-checkout https://github.com/JonathonLuiten/TrackEval.git external/TrackEval
+git -C external/TrackEval checkout --detach 12c8791b303e0a0b50f753af204249e622d0281a
+```
+
+```bash
+uv run --locked sort-gap-study evaluate-sort \
+  --run runs/sort-0000-gt-burst \
+  --ground-truth /path/to/label_02/0000.txt
+```
+
+`--ground-truth` указывает на полную разметку KITTI для того же видео при любом
+источнике детекций. Команда берёт TrackEval из указанной ревизии Git и сохраняет
+`metrics.csv` в каталоге запуска. Участок оценки исключает первые десять
+кадров и включает кадры маски. IDF1, HOTA, DetA и AssA записываются в процентах.
+Для последовательностей без оцениваемых Car в CSV указывается
+`status=no_ground_truth` и оставляется пустое поле RFP.
+
+Локальная копия TrackEval также нужна для запуска тестов `tests/test_evaluation.py`.

@@ -7,7 +7,12 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-BOOTSTRAP_RESAMPLES = 5000
+from sort_gap_study.bootstrap import (
+    BOOTSTRAP_RESAMPLES,
+    interval_and_p,
+    resample_indices,
+)
+
 _H1_LOSS_FRACTION = 0.5
 _H1_SERIES_LENGTH = 3
 _REQUIRED = {
@@ -103,14 +108,8 @@ def bootstrap_mean(
     if not np.isfinite(paired_differences).all():
         raise ValueError("Парные разности должны быть конечными.")
 
-    count = len(paired_differences)
-    indices = np.random.default_rng(seed).integers(
-        count,
-        size=(BOOTSTRAP_RESAMPLES, count),
-    )
+    indices = resample_indices(len(paired_differences), seed)
     replicates = paired_differences[indices].mean(axis=1)
     point = float(paired_differences.mean())
-    lower, upper = np.quantile(replicates, [0.025, 0.975])
-    exceedances = np.count_nonzero(replicates - point >= point)
-    p_value = (1 + exceedances) / (BOOTSTRAP_RESAMPLES + 1)
-    return point, (float(lower), float(upper)), p_value
+    interval, p_value = interval_and_p(point, replicates)
+    return point, interval, p_value

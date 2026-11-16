@@ -118,6 +118,7 @@ def _add_protocol_commands(commands):
     descriptions = {
         "freeze-protocol": "Зафиксировать состояние итогового эксперимента.",
         "verify-protocol": "Проверить фиксацию перед итоговым запуском.",
+        "run-final": "Выполнить зафиксированную итоговую оценку.",
     }
     parsers = {}
     for name, description in descriptions.items():
@@ -135,6 +136,9 @@ def _add_protocol_commands(commands):
             default=DEFAULT_TRACKEVAL_CHECKOUT,
         )
         parsers[name] = parser
+    final = parsers["run-final"]
+    final.add_argument("--output", type=Path, required=True)
+    final.add_argument("--workers", type=int, default=1)
     return parsers
 
 
@@ -154,12 +158,18 @@ def _run_protocol_check(
         if args.command == "freeze-protocol":
             freeze_protocol(inputs, args.manifest)
             message = "Протокол зафиксирован"
-        else:
+        elif args.command == "verify-protocol":
             verify_protocol(inputs, args.manifest)
             message = "Фиксация проверена"
-    except (OSError, TypeError, ValueError) as error:
+        else:
+            from sort_gap_study.final_run import run_final  # noqa: PLC0415 — lazy plotting
+
+            run_final(inputs, args.manifest, args.output, workers=args.workers)
+            message = "Результаты итоговой оценки"
+    except (ImportError, OSError, TypeError, ValueError) as error:
         parser.error(str(error))
-    sys.stdout.write(f"{message}: {args.manifest}\n")
+    destination = args.output if args.command == "run-final" else args.manifest
+    sys.stdout.write(f"{message}: {destination}\n")
 
 
 def _run_analysis(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:

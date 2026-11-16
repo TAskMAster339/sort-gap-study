@@ -23,7 +23,13 @@ TRACKEVAL_SUBTREE = "trackeval"
 _NUMPY_ALIASES = {"float": float, "int": int, "bool": bool}
 
 
-def evaluate_sort(run: Path, ground_truth: Path, checkout: Path) -> Path:
+def evaluate_sort(
+    run: Path,
+    ground_truth: Path,
+    checkout: Path,
+    *,
+    evaluation: bool = False,
+) -> Path:
     """Оценить существующий запуск и сохранить одну строку метрик."""
     manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
     if manifest.get("method") == "all":
@@ -31,8 +37,10 @@ def evaluate_sort(run: Path, ground_truth: Path, checkout: Path) -> Path:
             "Для оценки укажите подкаталог метода: sort, sort-extra или ocsort.",
         )
     sequence = manifest.get("sequence")
-    if sequence not in load_split(run / "protocol.toml").tune:
-        raise ValueError("Для оценки SORT требуется настроечная последовательность.")
+    split = load_split(run / "protocol.toml")
+    if sequence not in (split.evaluation if evaluation else split.tune):
+        kind = "итоговая" if evaluation else "настроечная"
+        raise ValueError(f"Для оценки SORT требуется {kind} последовательность.")
     frames = _frame_range(manifest)
 
     destination = run / "metrics.csv"

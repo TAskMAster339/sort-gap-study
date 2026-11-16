@@ -33,7 +33,7 @@ def summarize_pilot(metrics: Path, output: Path) -> None:
         _plot(
             summary,
             "IDF1",
-            "IDF1 по условиям пилота",
+            "IDF1 по условиям",
             "IDF1, %",
             output / "idf1.png",
         )

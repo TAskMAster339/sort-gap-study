@@ -96,6 +96,7 @@ def test_h2_reselects_length_and_thresholds_in_each_paired_sample(tmp_path):
     slack = result["rfp_slack"]
     assert slack["effect"] == pytest.approx(1.5)
     assert slack["ci95"] == [1, 2]
+    assert slack["interval_method"] == "simultaneous_boundary_envelope"
     assert slack["valid_replicates"] == BOOTSTRAP_RESAMPLES
 
 
@@ -122,11 +123,13 @@ def test_h2_unavailable_if_a_bootstrap_boundary_is_undefined(tmp_path):
     extra_boundary = result["boundaries"]["sort-extra"]
     assert extra_boundary["status"] == "finite"
     assert extra_boundary["bootstrap_status_counts"]["undefined"] > 0
-    for test in ("length_difference", "rfp_slack"):
-        assert result[test]["effect"] is not None
-        assert result[test]["status"] == "unavailable"
-        assert result[test]["ci95"] is None
-        assert result[test]["p_one_sided_raw"] == 1
+    difference = result["length_difference"]
+    assert difference["effect"] is not None
+    assert difference["status"] == "unavailable"
+    assert difference["ci95"] is None
+    assert difference["p_one_sided_raw"] == 1
+    assert result["rfp_slack"]["status"] == "ok"
+    assert result["rfp_slack"]["valid_replicates"] == BOOTSTRAP_RESAMPLES
 
 
 def test_h2_requires_complete_grid(tmp_path):
@@ -141,3 +144,29 @@ def test_h2_requires_complete_grid(tmp_path):
     }
     assert result["length_difference"]["p_one_sided_raw"] == 1
     assert result["rfp_slack"]["p_one_sided_raw"] == 1
+
+
+def test_h2_rfp_band_contains_zero_at_selected_threshold(tmp_path):
+    extra = [
+        [(90, 8), (90, 8), (90, 9), (80, 9), *_PASS_LATER[:2]],
+        [(90, 9), (90, 11), (90, 13), (80, 9), *_PASS_LATER[:2]],
+    ]
+    result = _run_h2(tmp_path, [_FINITE_ONE] * 2, extra)
+    assert result["rfp_slack"]["selected_length_frames"] == SERIES_LENGTHS[2]
+    assert result["rfp_slack"]["effect"] == 0
+    assert result["rfp_slack"]["ci95"][0] == 0
+    assert result["rfp_slack"]["ci95"][1] > 0
+    assert result["rfp_slack"]["p_one_sided_raw"] == 1
+
+
+def test_h2_rfp_checks_a_longer_boundary_than_the_point_estimate(tmp_path):
+    extra = [
+        [(90, 8), (90, 8), (90, 10), (80, 9), *_PASS_LATER[:2]],
+        [(90, 8), (90, 9), (90, 14), (80, 9), *_PASS_LATER[:2]],
+    ]
+    result = _run_h2(tmp_path, [_FINITE_ONE] * 2, extra)
+    slack = result["rfp_slack"]
+    assert slack["selected_length_frames"] == SERIES_LENGTHS[1]
+    assert slack["compatible_lengths_frames"] == list(SERIES_LENGTHS[1:3])
+    assert slack["effect"] > 0
+    assert slack["ci95"][0] == 0

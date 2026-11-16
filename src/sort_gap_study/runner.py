@@ -14,6 +14,7 @@ from numpy.typing import NDArray
 
 from sort_gap_study.config import (
     load_ocsort,
+    load_regionlet_threshold,
     load_sort_kalman,
     load_sort_lifecycle,
     load_sort_recovery,
@@ -45,6 +46,7 @@ class RunInputs:
     sequence: str
     source: Literal["gt", "regionlet"]
     detections: Path
+    evaluation: bool = False
 
 
 @dataclass(frozen=True)
@@ -76,17 +78,24 @@ def run_sort(
     method: Literal["sort", "sort-extra", "ocsort", "all"] = "sort",
     ocsort_checkout: Path = DEFAULT_OCSORT_CHECKOUT,
 ) -> None:
-    """Обработать настроечное видео и сохранить результаты в новом каталоге."""
+    """Обработать видео и сохранить результаты в новом каталоге."""
     methods = TRACKING_METHODS if method == "all" else (method,)
     code = git_state()
     with TemporaryDirectory(prefix="sort-gap-inputs-") as directory:
         root = Path(directory)
         snapshot = _snapshot_inputs(inputs, root)
-        frames = _tune_frames(snapshot)
+        frames = _video_frames(snapshot)
         removed = mask.removed_frames(frames)
         masked_frames = set(removed)
-        reader = {"gt": read_gt_detections, "regionlet": read_regionlet_detections}
-        detections = reader[inputs.source](snapshot.detections, frames)
+        detections = (
+            read_gt_detections(snapshot.detections, frames)
+            if inputs.source == "gt"
+            else read_regionlet_detections(
+                snapshot.detections,
+                frames,
+                score_threshold=load_regionlet_threshold(snapshot.config),
+            )
+        )
         _write_json(root / "mask.json", _mask_record(mask, removed))
         manifest = _manifest(inputs, root, frames, code)
 
@@ -179,9 +188,12 @@ def _write_context(
     _write_json(output / "manifest.json", details)
 
 
-def _tune_frames(inputs: RunInputs) -> range:
-    if inputs.sequence not in load_split(inputs.config).tune:
-        raise ValueError("Для запуска SORT требуется настроечная последовательность.")
+def _video_frames(inputs: RunInputs) -> range:
+    split = load_split(inputs.config)
+    sequences = split.evaluation if inputs.evaluation else split.tune
+    if inputs.sequence not in sequences:
+        kind = "итоговая" if inputs.evaluation else "настроечная"
+        raise ValueError(f"Для запуска SORT требуется {kind} последовательность.")
     sequences = read_seqmap(inputs.seqmap)
     if inputs.sequence not in sequences:
         raise ValueError(f"Последовательность {inputs.sequence} отсутствует в seqmap.")

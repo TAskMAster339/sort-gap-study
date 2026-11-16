@@ -14,6 +14,59 @@ class SequenceSplit:
 
 
 @dataclass(frozen=True)
+class EvaluationGrid:
+    mask_seeds: tuple[int, ...]
+    burst_lengths_by_percent: dict[int, tuple[int, ...]]
+    bootstrap_seed: int
+
+
+def load_evaluation_grid(path: Path) -> EvaluationGrid:
+    with path.open("rb") as file:
+        grid = tomllib.load(file).get("evaluation_grid")
+    if not isinstance(grid, dict):
+        raise ValueError("Ожидается таблица [evaluation_grid].")
+    lengths = grid.get("burst_lengths_by_percent")
+    if not isinstance(lengths, dict) or not lengths:
+        raise ValueError("Требуются доли пропусков и длины серий.")
+    full_percent = 100
+    by_percent = {}
+    for key, values in lengths.items():
+        percent = int(key)
+        if str(percent) != key or not 0 < percent < full_percent:
+            raise ValueError(f"Некорректная доля пропусков: {key}.")
+        by_percent[percent] = _unique_integers(values, minimum=1)
+    bootstrap_seed = grid.get("bootstrap_seed")
+    if type(bootstrap_seed) is not int or bootstrap_seed < 0:
+        raise ValueError("bootstrap_seed: ожидается неотрицательное целое.")
+    return EvaluationGrid(
+        _unique_integers(grid.get("mask_seeds"), minimum=0),
+        by_percent,
+        bootstrap_seed,
+    )
+
+
+def _unique_integers(values: object, *, minimum: int) -> tuple[int, ...]:
+    if not isinstance(values, list) or not values:
+        raise ValueError("Требуется непустой список целых.")
+    if any(type(value) is not int or value < minimum for value in values):
+        raise ValueError(f"Ожидаются целые числа от {minimum}.")
+    if len(values) != len(set(values)):
+        raise ValueError("Список содержит повторяющиеся значения.")
+    return tuple(values)
+
+
+def load_regionlet_threshold(path: Path) -> float:
+    with path.open("rb") as file:
+        regionlet = tomllib.load(file).get("regionlet", {})
+    if not isinstance(regionlet, dict):
+        raise ValueError("Ожидается таблица [regionlet].")
+    threshold = regionlet.get("score_threshold", 0.0)
+    if type(threshold) not in (int, float) or not math.isfinite(threshold):
+        raise ValueError("regionlet.score_threshold: ожидается конечное число.")
+    return float(threshold)
+
+
+@dataclass(frozen=True)
 class SortKalmanConfig:
     initial_covariance: tuple[float, ...]
     process_noise: tuple[float, ...]

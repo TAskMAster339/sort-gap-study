@@ -150,7 +150,8 @@ def _estimate(
                 strict=True,
             )
         },
-        **_compare(point, boot),
+        "length_difference": _compare_lengths(point, boot),
+        "rfp_slack": _rfp_inference(baseline, curves, indices, point),
     }
 
 
@@ -201,7 +202,10 @@ class _BoundaryScores:
         return np.logical_and.accumulate(self.passes, axis=-1).sum(axis=-1)
 
 
-def _compare(point: _BoundaryScores, boot: _BoundaryScores) -> dict[str, object]:
+def _compare_lengths(
+    point: _BoundaryScores,
+    boot: _BoundaryScores,
+) -> dict[str, object]:
     point_counts = point.counts
     counts = boot.counts
     length_difference = None
@@ -211,30 +215,87 @@ def _compare(point: _BoundaryScores, boot: _BoundaryScores) -> dict[str, object]
     both_finite = ((counts > 0) & (counts < len(_LENGTHS))).all(axis=1)
     lengths = _LENGTHS[counts[both_finite] - 1]
 
-    selected = int(point_counts[1])
-    point_slack = (
-        float(point.baseline[1] + _RFP_MARGIN - point.curves[1, selected - 1, 1])
-        if selected
-        else None
+    return _inference(length_difference, lengths[:, 1] - lengths[:, 0])
+
+
+def _rfp_inference(
+    baseline: NDArray[np.float64],
+    curves: NDArray[np.float64],
+    indices: NDArray[np.int64],
+    scores: _BoundaryScores,
+) -> dict[str, object]:
+    selected = int(scores.counts[1])
+    if not selected:
+        return {"selected_length_frames": None, **_inference(None, np.empty(0))}
+
+    extra = curves[:, 1]
+    margins = np.stack(
+        (
+            extra[..., 0] - baseline[:, 0, None] + _IDF1_MARGIN,
+            baseline[:, 1, None] - extra[..., 1] + _RFP_MARGIN,
+        ),
+        axis=-1,
     )
-    valid = counts[:, 1] > 0
-    slack = (
-        boot.baseline[valid, 1]
-        + _RFP_MARGIN
-        - boot.curves[valid, 1, counts[valid, 1] - 1, 1]
+    point = np.stack(
+        (
+            scores.curves[1, :, 0] - (scores.baseline[0] - _IDF1_MARGIN),
+            (scores.baseline[1] + _RFP_MARGIN) - scores.curves[1, :, 1],
+        ),
+        axis=-1,
+    )
+    # Scale each margin by its between-video spread. Constants have zero deviation.
+    scale = np.where(np.ptp(margins, axis=0) > 0, margins.std(axis=0), 0)
+    centered = margins[indices].mean(axis=1) - margins.mean(axis=0)
+    standard = np.divide(centered, scale, out=np.zeros_like(centered), where=scale > 0)
+    radii = np.abs(standard).max(axis=(1, 2))
+    radius95 = np.quantile(radii, 0.95)
+
+    lower, earliest, latest = _compatible_boundaries(point, scale, radius95)
+    possible_slacks = np.arange(1, len(_LENGTHS) + 1)
+    compatible = (possible_slacks >= earliest) & (latest >= possible_slacks)
+    interval = [
+        float(np.maximum(lower[compatible], 0).min()),
+        float((point[:, 1] + radius95 * scale[:, 1])[compatible].max()),
+    ]
+
+    lower_all, earliest_all, latest_all = _compatible_boundaries(
+        point,
+        scale,
+        radii[:, None, None],
+    )
+    compatible_all = (possible_slacks >= earliest_all[:, None]) & (
+        latest_all[:, None] >= possible_slacks
+    )
+    nonpositive = (earliest_all == 0) | np.any(
+        compatible_all & (lower_all <= 0),
+        axis=1,
     )
     return {
-        "length_difference": _inference(
-            length_difference,
-            lengths[:, 1] - lengths[:, 0],
-        ),
-        "rfp_slack": {
-            "selected_length_frames": SERIES_LENGTHS[selected - 1]
-            if selected
-            else None,
-            **_inference(point_slack, slack),
-        },
+        "selected_length_frames": SERIES_LENGTHS[selected - 1],
+        "interval_method": "simultaneous_boundary_envelope",
+        "compatible_lengths_frames": _LENGTHS[compatible].tolist(),
+        "boundary_can_be_undefined": bool(earliest == 0),
+        "status": "ok",
+        "effect": float(point[selected - 1, 1]),
+        "ci95": interval,
+        "p_one_sided_raw": (1 + np.count_nonzero(nonpositive)) / (len(radii) + 1),
+        "valid_replicates": len(radii),
     }
+
+
+def _compatible_boundaries(
+    point: NDArray[np.float64],
+    scale: NDArray[np.float64],
+    radius: float | NDArray[np.float64],
+) -> tuple[NDArray[np.float64], NDArray[np.int64], NDArray[np.int64]]:
+    """Return lower RFP margins and the range of compatible prefix lengths."""
+    lower = point - radius * scale
+    upper = point + radius * scale
+    earliest = np.logical_and.accumulate((lower >= 0).all(axis=-1), axis=-1).sum(
+        axis=-1,
+    )
+    latest = np.logical_and.accumulate((upper >= 0).all(axis=-1), axis=-1).sum(axis=-1)
+    return lower[..., 1], earliest, latest
 
 
 def _inference(point: float | None, replicates: NDArray) -> dict[str, object]:

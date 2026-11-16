@@ -1,5 +1,6 @@
 """Чтение конфигурации экспериментального протокола."""
 
+import math
 import re
 import tomllib
 from dataclasses import dataclass
@@ -10,6 +11,52 @@ from pathlib import Path
 class SequenceSplit:
     tune: tuple[str, ...]
     evaluation: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SortKalmanConfig:
+    initial_covariance: tuple[float, ...]
+    process_noise: tuple[float, ...]
+    measurement_noise: tuple[float, ...]
+    bbox_epsilon: float
+
+
+def load_sort_kalman(path: Path) -> SortKalmanConfig:
+    """Загрузить диагонали ковариаций и нижнюю границу площади и пропорций."""
+    with path.open("rb") as file:
+        sort = tomllib.load(file).get("sort")
+
+    kalman = sort.get("kalman") if isinstance(sort, dict) else None
+    if not isinstance(kalman, dict):
+        raise TypeError("Ожидается таблица [sort.kalman].")
+
+    return SortKalmanConfig(
+        initial_covariance=_covariance_diagonal(kalman, "initial_covariance", 7),
+        process_noise=_covariance_diagonal(kalman, "process_noise", 7),
+        measurement_noise=_covariance_diagonal(kalman, "measurement_noise", 4),
+        bbox_epsilon=_positive_number(
+            kalman.get("bbox_epsilon"),
+            "sort.kalman.bbox_epsilon",
+        ),
+    )
+
+
+def _covariance_diagonal(
+    table: dict[str, object],
+    name: str,
+    size: int,
+) -> tuple[float, ...]:
+    values = table.get(name)
+    key = f"sort.kalman.{name}"
+    if not isinstance(values, list) or len(values) != size:
+        raise ValueError(f"{key}: ожидается список из {size} чисел.")
+    return tuple(_positive_number(value, key) for value in values)
+
+
+def _positive_number(value: object, key: str) -> float:
+    if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{key}: ожидается конечное положительное число.")
+    return float(value)
 
 
 def load_split(path: Path) -> SequenceSplit:

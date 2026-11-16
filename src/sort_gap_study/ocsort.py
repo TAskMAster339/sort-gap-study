@@ -2,6 +2,7 @@
 
 import sys
 from importlib import import_module
+from math import isfinite
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType
@@ -73,6 +74,7 @@ class OCSortTracker:
         matched = []
         created = []
         estimates = []
+        invalid = []
         for track in self._engine.trackers:
             alive.add(track.id)
             track_id = track.id + 1
@@ -82,7 +84,11 @@ class OCSortTracker:
                 events.append((track_id, detection_index))
             # The upstream hits counter excludes creation, then counts real updates.
             if track.hits + 1 >= self._lifecycle.min_hits:
-                x1, y1, x2, y2 = track.get_state()[0].tolist()
+                with np.errstate(invalid="ignore", divide="ignore"):
+                    x1, y1, x2, y2 = track.get_state()[0].tolist()
+                if not (all(map(isfinite, (x1, y1, x2, y2))) and x1 < x2 and y1 < y2):
+                    invalid.append(track_id)
+                    continue
                 estimates.append(
                     TrackEstimate(
                         track_id,
@@ -94,6 +100,7 @@ class OCSortTracker:
             matched=tuple(matched),
             created=tuple(created),
             removed=tuple(track_id + 1 for track_id in sorted(previous - alive)),
+            invalid_estimates=tuple(invalid),
         )
         self._last_frame = frame_index
         return tuple(estimates)

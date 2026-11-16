@@ -104,3 +104,26 @@ def test_ocsort_uses_actual_rows_for_identical_boxes_and_independent_ids(
     assert {detection for _, detection in tracker.last_events.matched} == {0, 1}
     assert tracker.last_events.created == ((3, 2),)
     np.testing.assert_array_equal(detections, before)
+
+
+@pytest.mark.parametrize("bbox", [[np.nan] * 4, [0, 0, 0, 10]])
+def test_ocsort_omits_invalid_bbox_and_keeps_association(
+    tracker_factory,
+    monkeypatch,
+    bbox,
+):
+    tracker = tracker_factory()
+    for frame in range(3):
+        tracker.step(frame, _detections(), artificial_gap=False)
+    track = tracker._engine.trackers[0]  # noqa: SLF001 — inject an upstream estimate
+    with monkeypatch.context() as patch:
+        patch.setattr(track, "get_state", lambda: np.array([bbox]))
+        assert tracker.step(3, _detections(), artificial_gap=False) == ()
+    events = tracker.last_events
+    assert events.matched == ((1, 0),)
+    assert events.invalid_estimates == (1,)
+    assert events.removed == ()
+
+    (estimate,) = tracker.step(4, _detections(), artificial_gap=False)
+    assert estimate.track_id == 1
+    assert tracker.last_events.invalid_estimates == ()

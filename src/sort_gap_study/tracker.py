@@ -30,6 +30,7 @@ class FrameEvents:
     removed: tuple[int, ...] = ()
     recovery_candidates: tuple[int, ...] = ()
     recovery_matches: tuple[tuple[int, int], ...] = ()
+    invalid_estimates: tuple[int, ...] = ()
 
 
 class Tracker(Protocol):

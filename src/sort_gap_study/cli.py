@@ -43,6 +43,11 @@ def main() -> None:
     )
     summary.add_argument("--metrics", type=Path, required=True)
     summary.add_argument("--output", type=Path, required=True)
+
+    h1 = commands.add_parser("analyze-h1", help="Рассчитать парный bootstrap для H1.")
+    h1.add_argument("--by-video", type=Path, required=True)
+    h1.add_argument("--output", type=Path, required=True)
+    h1.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
     if args.command == "audit-data":
@@ -79,14 +84,23 @@ def main() -> None:
         except (ImportError, KeyError, OSError, TypeError, ValueError) as error:
             evaluate.error(str(error))
         sys.stdout.write(f"Метрики SORT: {metrics}\n")
-    elif args.command == "summarize-pilot":
-        from sort_gap_study.summary import summarize_pilot  # noqa: PLC0415 — plotting dependencies
+    elif args.command in ("summarize-pilot", "analyze-h1"):
+        _run_analysis(args, summary if args.command == "summarize-pilot" else h1)
 
-        try:
+
+def _run_analysis(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    try:
+        if args.command == "summarize-pilot":
+            from sort_gap_study.summary import summarize_pilot  # noqa: PLC0415 — lazy plotting
+
             summarize_pilot(args.metrics, args.output)
-        except (OSError, TypeError, ValueError) as error:
-            summary.error(str(error))
-        sys.stdout.write(f"Таблицы и графики: {args.output}\n")
+        else:
+            from sort_gap_study.h1 import write_h1  # noqa: PLC0415 — lazy analysis
+
+            write_h1(args.by_video, args.output, seed=args.seed)
+    except (OSError, TypeError, ValueError) as error:
+        parser.error(str(error))
+    sys.stdout.write(f"Результаты анализа: {args.output}\n")
 
 
 def _add_run_arguments(run: argparse.ArgumentParser) -> None:

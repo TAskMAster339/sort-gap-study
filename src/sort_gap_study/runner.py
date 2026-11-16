@@ -11,7 +11,12 @@ from typing import Literal
 import numpy as np
 from numpy.typing import NDArray
 
-from sort_gap_study.config import load_sort_kalman, load_sort_lifecycle, load_split
+from sort_gap_study.config import (
+    load_sort_kalman,
+    load_sort_lifecycle,
+    load_sort_recovery,
+    load_split,
+)
 from sort_gap_study.dataset import (
     DETECTION_COLUMNS,
     read_gt_detections,
@@ -52,7 +57,13 @@ class MaskSpec:
         return make_mask(frames, self.loss_fraction, self.kind, seed=self.seed)
 
 
-def run_sort(inputs: RunInputs, mask: MaskSpec, output: Path) -> None:
+def run_sort(
+    inputs: RunInputs,
+    mask: MaskSpec,
+    output: Path,
+    *,
+    method: Literal["sort", "sort-extra"] = "sort",
+) -> None:
     """Обработать настроечное видео и сохранить результаты в новом каталоге."""
     frames = _tune_frames(inputs)
     removed = mask.removed_frames(frames)
@@ -61,6 +72,7 @@ def run_sort(inputs: RunInputs, mask: MaskSpec, output: Path) -> None:
     tracker = SortTracker(
         load_sort_kalman(inputs.config),
         load_sort_lifecycle(inputs.config),
+        recovery=load_sort_recovery(inputs.config) if method == "sort-extra" else None,
     )
 
     output.mkdir(parents=True, exist_ok=False)
@@ -79,7 +91,7 @@ def run_sort(inputs: RunInputs, mask: MaskSpec, output: Path) -> None:
         _write_json(
             output / "manifest.json",
             {
-                "method": "sort",
+                "method": method,
                 "sequence": inputs.sequence,
                 "source": inputs.source,
                 "seqmap": str(inputs.seqmap.resolve()),

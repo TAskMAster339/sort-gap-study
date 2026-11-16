@@ -1,4 +1,4 @@
-"""Основная ассоциация SORT по IoU."""
+"""Ассоциация SORT по IoU и глобальное назначение."""
 
 from dataclasses import dataclass
 
@@ -48,7 +48,16 @@ def associate_iou(
         raise ValueError("Порог IoU должен принадлежать отрезку [0, 1].")
 
     iou = pairwise_iou(track_boxes, detection_boxes)
-    track_count, detection_count = iou.shape
+    return assign_costs(np.where(iou >= min_iou, 1 - iou, np.inf))
+
+
+def assign_costs(pair_costs: NDArray[np.float64]) -> Association:
+    """Максимизировать число пар, затем минимизировать сумму стоимостей.
+
+    Допустимые стоимости лежат в диапазоне [0, 1]. Запрещённые пары имеют
+    бесконечную стоимость.
+    """
+    track_count, detection_count = pair_costs.shape
     if not track_count or not detection_count:
         return Association((), tuple(range(track_count)), tuple(range(detection_count)))
 
@@ -56,7 +65,7 @@ def associate_iou(
     # Цена пропуска превышает максимально возможную сумму стоимостей реальных пар.
     unmatched_cost = min(track_count, detection_count) + 1
     costs = np.full((track_count, detection_count + track_count), unmatched_cost, float)
-    costs[:, :detection_count] = np.where(iou >= min_iou, 1 - iou, np.inf)
+    costs[:, :detection_count] = pair_costs
     rows, columns = linear_sum_assignment(costs)
 
     real = columns < detection_count

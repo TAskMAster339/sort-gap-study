@@ -27,6 +27,44 @@ class SortLifecycleConfig:
     max_age: int
 
 
+@dataclass(frozen=True)
+class SortRecoveryConfig:
+    max_mahalanobis_squared: float
+    max_center_shift: float
+    max_size_ratio: float
+
+
+def load_sort_recovery(path: Path) -> SortRecoveryConfig:
+    """Загрузить пороги второго назначения."""
+    with path.open("rb") as file:
+        sort = tomllib.load(file).get("sort")
+
+    recovery = sort.get("recovery") if isinstance(sort, dict) else None
+    if not isinstance(recovery, dict):
+        raise TypeError("Ожидается таблица [sort.recovery].")
+
+    max_size_ratio = _positive_number(
+        recovery.get("max_size_ratio"),
+        "sort.recovery.max_size_ratio",
+    )
+    if max_size_ratio <= 1:
+        raise ValueError(
+            "sort.recovery.max_size_ratio: ожидается число больше единицы.",
+        )
+
+    return SortRecoveryConfig(
+        max_mahalanobis_squared=_positive_number(
+            recovery.get("max_mahalanobis_squared"),
+            "sort.recovery.max_mahalanobis_squared",
+        ),
+        max_center_shift=_positive_number(
+            recovery.get("max_center_shift"),
+            "sort.recovery.max_center_shift",
+        ),
+        max_size_ratio=max_size_ratio,
+    )
+
+
 def load_sort_lifecycle(path: Path) -> SortLifecycleConfig:
     """Загрузить условия подтверждения и удаления трека SORT."""
     with path.open("rb") as file:

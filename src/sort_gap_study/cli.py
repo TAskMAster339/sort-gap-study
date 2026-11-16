@@ -30,6 +30,7 @@ def main() -> None:
     run.add_argument("--seqmap", type=Path, required=True)
     run.add_argument("--sequence", required=True)
     run.add_argument("--source", choices=("gt", "regionlet"), required=True)
+    run.add_argument("--method", choices=("sort", "sort-extra"), default="sort")
     run.add_argument("--detections", type=Path, required=True)
     run.add_argument("--output", type=Path, required=True)
     run.add_argument(
@@ -68,7 +69,7 @@ def main() -> None:
         )
         mask = MaskSpec(args.mask, args.loss_fraction, args.seed, args.series_length)
         try:
-            run_sort(inputs, mask, args.output)
+            run_sort(inputs, mask, args.output, method=args.method)
         except (OSError, TypeError, ValueError) as error:
             run.error(str(error))
         sys.stdout.write(f"Результаты SORT: {args.output}\n")

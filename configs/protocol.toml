@@ -14,3 +14,8 @@ bbox_epsilon = 1e-6
 [sort.lifecycle]
 min_hits = 3
 max_age = 30
+
+[sort.recovery]
+max_mahalanobis_squared = 9.21034
+max_center_shift = 2.0
+max_size_ratio = 2.0

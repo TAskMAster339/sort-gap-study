@@ -7,6 +7,7 @@ from sort_gap_study.config import SortKalmanConfig
 
 _STATE_SIZE = 7
 _MEASUREMENT_SIZE = 4
+_CENTER_SIZE = 2
 _AREA = 2
 _AREA_VELOCITY = 6
 
@@ -63,6 +64,15 @@ class SortKalmanFilter:
         self._covariance = (
             _TRANSITION @ self._covariance @ _TRANSITION.T + self._process_noise
         )
+
+    def project_center(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """Вернуть центр и ковариацию инновации для двух координат центра."""
+        center = self._state[:_CENTER_SIZE].copy()
+        covariance = (
+            self._covariance[:_CENTER_SIZE, :_CENTER_SIZE]
+            + self._measurement_noise[:_CENTER_SIZE, :_CENTER_SIZE]
+        )
+        return center, covariance
 
     def correct(self, bbox: ArrayLike) -> None:
         """Скорректировать оценку на текущем кадре по наблюдаемому bbox."""

@@ -3,14 +3,22 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sort_gap_study.config import load_sort_kalman, load_sort_lifecycle
+from sort_gap_study.config import (
+    load_sort_kalman,
+    load_sort_lifecycle,
+    load_sort_recovery,
+)
 from sort_gap_study.sort import SortTracker
 
 
 @pytest.fixture
-def tracker():
-    path = Path(__file__).resolve().parents[1] / "configs" / "protocol.toml"
-    return SortTracker(load_sort_kalman(path), load_sort_lifecycle(path))
+def protocol():
+    return Path(__file__).resolve().parents[1] / "configs" / "protocol.toml"
+
+
+@pytest.fixture
+def tracker(protocol):
+    return SortTracker(load_sort_kalman(protocol), load_sort_lifecycle(protocol))
 
 
 def _detection(offset=0):
@@ -160,3 +168,28 @@ def test_recovery_candidates_use_age_at_first_available_frame(
 
     assert tracker.last_events.recovery_candidates == candidates
     assert tracker.last_events.removed == removed
+
+
+def test_extra_association_uses_remaining_detections_before_track_creation(protocol):
+    tracker = SortTracker(
+        load_sort_kalman(protocol),
+        load_sort_lifecycle(protocol),
+        recovery=load_sort_recovery(protocol),
+    )
+    for frame in range(3):
+        tracker.step(frame, _detection() + _detection(40), artificial_gap=False)
+    for frame in range(3, 6):
+        estimates_during_gap = tracker.step(frame, [], artificial_gap=True)
+
+    detections = _detection(100) + _detection(40) + _detection(10)
+    estimates = tracker.step(6, detections, artificial_gap=False)
+    events = tracker.last_events
+
+    assert events.recovery_candidates == (1,)
+    assert events.matched == ((2, 1), (1, 2))
+    assert events.recovery_matches == ((1, 2),)
+    assert events.created == ((3, 0),)
+    assert [estimate.track_id for estimate in estimates] == [1, 2]
+    assert all(estimate.observed for estimate in estimates)
+    assert estimates[0].bbox[0] > estimates_during_gap[0].bbox[0]
+    assert estimates_during_gap[0].bbox == (0, 0, 10, 10)

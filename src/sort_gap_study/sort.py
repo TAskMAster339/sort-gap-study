@@ -6,9 +6,14 @@ from operator import index
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-from sort_gap_study.association import as_box_array, associate_iou
-from sort_gap_study.config import SortKalmanConfig, SortLifecycleConfig
+from sort_gap_study.association import as_box_array, assign_costs, associate_iou
+from sort_gap_study.config import (
+    SortKalmanConfig,
+    SortLifecycleConfig,
+    SortRecoveryConfig,
+)
 from sort_gap_study.kalman import SortKalmanFilter
+from sort_gap_study.recovery import recovery_costs
 
 _DETECTION_COLUMNS = 5
 
@@ -30,6 +35,7 @@ class FrameEvents:
     created: tuple[tuple[int, int], ...] = ()
     removed: tuple[int, ...] = ()
     recovery_candidates: tuple[int, ...] = ()
+    recovery_matches: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass
@@ -47,9 +53,12 @@ class SortTracker:
         self,
         kalman_config: SortKalmanConfig,
         lifecycle: SortLifecycleConfig,
+        *,
+        recovery: SortRecoveryConfig | None = None,
     ) -> None:
         self._kalman_config = kalman_config
         self._lifecycle = lifecycle
+        self._recovery = recovery
         self._tracks: list[_Track] = []
         self._next_track_id = 1
         self._last_frame: int | None = None
@@ -98,8 +107,14 @@ class SortTracker:
             if artificial_gap
             else self._recovery_candidates(association.unmatched_tracks)
         )
+        recovery_matches = self._match_recovery(
+            recovery_indices,
+            association.unmatched_detections,
+            predictions,
+            boxes,
+        )
         matched = []
-        for track_index, detection_index in association.matches:
+        for track_index, detection_index in association.matches + recovery_matches:
             track = self._tracks[track_index]
             track.kalman.correct(boxes[detection_index])
             track.last_observed_frame = frame_index
@@ -107,7 +122,15 @@ class SortTracker:
             matched.append((track.track_id, detection_index))
 
         created = []
-        for detection_index in association.unmatched_detections:
+        recovered_detections = {
+            detection_index for _, detection_index in recovery_matches
+        }
+        unmatched_detections = (
+            detection_index
+            for detection_index in association.unmatched_detections
+            if detection_index not in recovered_detections
+        )
+        for detection_index in unmatched_detections:
             kalman = SortKalmanFilter(boxes[detection_index], self._kalman_config)
             self._tracks.append(_Track(self._next_track_id, kalman, frame_index))
             created.append((self._next_track_id, detection_index))
@@ -119,6 +142,10 @@ class SortTracker:
             removed=tuple(removed),
             recovery_candidates=tuple(
                 self._tracks[i].track_id for i in recovery_indices
+            ),
+            recovery_matches=tuple(
+                (self._tracks[track_index].track_id, detection_index)
+                for track_index, detection_index in recovery_matches
             ),
         )
         if not artificial_gap:
@@ -134,6 +161,26 @@ class SortTracker:
             )
             for track in self._tracks
             if track.hits >= self._lifecycle.min_hits
+        )
+
+    def _match_recovery(
+        self,
+        track_indices: tuple[int, ...],
+        detection_indices: tuple[int, ...],
+        predictions: list[NDArray[np.float64]],
+        boxes: NDArray[np.float64],
+    ) -> tuple[tuple[int, int], ...]:
+        if self._recovery is None or not track_indices or not detection_indices:
+            return ()
+        costs = recovery_costs(
+            np.asarray([predictions[i] for i in track_indices]),
+            boxes[list(detection_indices)],
+            [self._tracks[i].kalman.project_center() for i in track_indices],
+            self._recovery,
+        )
+        return tuple(
+            (track_indices[row], detection_indices[col])
+            for row, col in assign_costs(costs).matches
         )
 
     def _recovery_candidates(

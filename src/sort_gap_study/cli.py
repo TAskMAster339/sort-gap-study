@@ -53,6 +53,11 @@ def main() -> None:
         analysis.add_argument("--by-video", type=Path, required=True)
         analysis.add_argument("--output", type=Path, required=True)
         analysis.add_argument("--seed", type=int, default=0)
+    holm = commands.add_parser(
+        "adjust-holm",
+        help="Применить поправку Holm для H1 и H2.",
+    )
+    _add_holm_arguments(holm)
     args = parser.parse_args()
 
     if args.command == "audit-data":
@@ -89,12 +94,15 @@ def main() -> None:
         except (ImportError, KeyError, OSError, TypeError, ValueError) as error:
             evaluate.error(str(error))
         sys.stdout.write(f"Метрики SORT: {metrics}\n")
-    elif args.command in ("summarize-pilot", "analyze-h1", "analyze-h2"):
+    elif args.command in ("summarize-pilot", "analyze-h1", "analyze-h2", "adjust-holm"):
         _run_analysis(
             args,
-            {"summarize-pilot": summary, "analyze-h1": h1, "analyze-h2": h2}[
-                args.command
-            ],
+            {
+                "summarize-pilot": summary,
+                "analyze-h1": h1,
+                "analyze-h2": h2,
+                "adjust-holm": holm,
+            }[args.command],
         )
 
 
@@ -108,13 +116,23 @@ def _run_analysis(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
             from sort_gap_study.h1 import write_h1  # noqa: PLC0415 — lazy analysis
 
             write_h1(args.by_video, args.output, seed=args.seed)
-        else:
+        elif args.command == "analyze-h2":
             from sort_gap_study.h2 import write_h2  # noqa: PLC0415 — lazy analysis
 
             write_h2(args.by_video, args.output, seed=args.seed)
-    except (OSError, TypeError, ValueError) as error:
+        else:
+            from sort_gap_study.holm import write_holm  # noqa: PLC0415 — lazy analysis
+
+            write_holm(args.h1, args.h2, args.output)
+    except (KeyError, OSError, TypeError, ValueError) as error:
         parser.error(str(error))
     sys.stdout.write(f"Результаты анализа: {args.output}\n")
+
+
+def _add_holm_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--h1", type=Path, required=True)
+    parser.add_argument("--h2", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
 
 
 def _add_run_arguments(run: argparse.ArgumentParser) -> None:

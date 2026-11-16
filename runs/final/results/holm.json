@@ -1,0 +1,48 @@
+{
+  "method": "holm",
+  "family_size": 6,
+  "tests": [
+    {
+      "test": "h1_idf1",
+      "source": "gt",
+      "status": "ok",
+      "p_one_sided_raw": 0.0001999600079984003,
+      "p_holm": 0.0011997600479904018
+    },
+    {
+      "test": "h1_idf1",
+      "source": "regionlet",
+      "status": "ok",
+      "p_one_sided_raw": 0.0001999600079984003,
+      "p_holm": 0.0011997600479904018
+    },
+    {
+      "test": "h2_length_difference",
+      "source": "gt",
+      "status": "unavailable",
+      "p_one_sided_raw": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "test": "h2_rfp_slack",
+      "source": "gt",
+      "status": "unavailable",
+      "p_one_sided_raw": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "test": "h2_length_difference",
+      "source": "regionlet",
+      "status": "unavailable",
+      "p_one_sided_raw": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "test": "h2_rfp_slack",
+      "source": "regionlet",
+      "status": "ok",
+      "p_one_sided_raw": 0.5260947810437913,
+      "p_holm": 1.0
+    }
+  ]
+}

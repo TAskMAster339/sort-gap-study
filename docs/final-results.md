@@ -77,15 +77,21 @@ Regionlet. Интервалы рассчитаны по 5 000 парным в�
 - Манифест и снимок входов сохранены в `runs/final/inputs/`. Маски,
   прогнозы, журналы событий и метрики отдельных прогонов сохранены
   в `runs/final/runs/`.
-- Полная таблица `runs/final/results/metrics.csv` содержит 40 404 строки.
-  Таблица `results/summary/by-video.csv` содержит 1 428 строк,
-  `results/summary/summary.csv` содержит 102 строки.
-- Графики итоговой оценки сохранены в `results/summary/idf1.png` и
-  `results/summary/fp-final.png` под `runs/final/`. В исходном
-  `fp.png` остался заголовок пилота. В `fp-final.png` заголовок
-  исправлен при повторном построении из той же сводной таблицы.
-- `results/h1.json`, `results/h2.json` и `results/holm.json` содержат
-  точечные оценки, интервалы, статусы и значения p.
+- Итоговые результаты сохранены в Git в коммите `ee08998`.
+  В [каталоге результатов](../runs/final/results/) 10 файлов общим
+  объёмом 8,6 МБ.
+- [Полная таблица метрик](../runs/final/results/metrics.csv) содержит 40 404
+  строки, [таблица по видео](../runs/final/results/summary/by-video.csv) —
+  1 428 строк, [сводная таблица](../runs/final/results/summary/summary.csv) —
+  102 строки.
+- [График IDF1](../runs/final/results/summary/idf1.png) и
+  [график FP](../runs/final/results/summary/fp-final.png) построены по сводной
+  таблице. Исходный [график FP](../runs/final/results/summary/fp.png)
+  сохранён с заголовком пилота.
+- [Результаты H1](../runs/final/results/h1.json),
+  [результаты H2](../runs/final/results/h2.json) и
+  [поправка Holm](../runs/final/results/holm.json) содержат точечные оценки,
+  интервалы, статусы и значения p.
 - Сверены все манифесты, маски и отдельные таблицы метрик, независимо
   пересчитаны агрегаты и проверено соответствие кадров маскам в 168
   журналах. Повтор условия `0001/p50-burst-l3-s0` дал побайтовое

@@ -23,6 +23,10 @@ _NUMPY_ALIASES = {"float": float, "int": int, "bool": bool}
 def evaluate_sort(run: Path, ground_truth: Path, checkout: Path) -> Path:
     """Оценить существующий запуск и сохранить одну строку метрик."""
     manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+    if manifest.get("method") == "all":
+        raise ValueError(
+            "Для оценки укажите подкаталог метода: sort, sort-extra или ocsort.",
+        )
     sequence = manifest.get("sequence")
     if sequence not in load_split(run / "protocol.toml").tune:
         raise ValueError("Для оценки SORT требуется настроечная последовательность.")

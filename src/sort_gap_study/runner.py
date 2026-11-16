@@ -3,9 +3,10 @@
 import json
 import shutil
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from itertools import groupby
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Literal
 
 import numpy as np
@@ -30,8 +31,11 @@ from sort_gap_study.ocsort import (
     OCSORT_REVISION,
     OCSortTracker,
 )
+from sort_gap_study.provenance import environment_versions, git_state, sha256_file
 from sort_gap_study.sort import SortTracker
 from sort_gap_study.tracker import Tracker, TrackEstimate
+
+TRACKING_METHODS = ("sort", "sort-extra", "ocsort")
 
 
 @dataclass(frozen=True)
@@ -69,56 +73,110 @@ def run_sort(
     mask: MaskSpec,
     output: Path,
     *,
-    method: Literal["sort", "sort-extra", "ocsort"] = "sort",
+    method: Literal["sort", "sort-extra", "ocsort", "all"] = "sort",
     ocsort_checkout: Path = DEFAULT_OCSORT_CHECKOUT,
 ) -> None:
     """Обработать настроечное видео и сохранить результаты в новом каталоге."""
-    frames = _tune_frames(inputs)
-    removed = mask.removed_frames(frames)
-    reader = {"gt": read_gt_detections, "regionlet": read_regionlet_detections}
-    detections = reader[inputs.source](inputs.detections, frames)
-    lifecycle = load_sort_lifecycle(inputs.config)
-    tracker: Tracker
-    if method == "ocsort":
-        tracker = OCSortTracker(ocsort_checkout, load_ocsort(inputs.config), lifecycle)
-    else:
-        tracker = SortTracker(
-            load_sort_kalman(inputs.config),
-            lifecycle,
-            recovery=load_sort_recovery(inputs.config)
-            if method == "sort-extra"
-            else None,
-        )
+    methods = TRACKING_METHODS if method == "all" else (method,)
+    code = git_state()
+    with TemporaryDirectory(prefix="sort-gap-inputs-") as directory:
+        root = Path(directory)
+        snapshot = _snapshot_inputs(inputs, root)
+        frames = _tune_frames(snapshot)
+        removed = mask.removed_frames(frames)
+        masked_frames = set(removed)
+        reader = {"gt": read_gt_detections, "regionlet": read_regionlet_detections}
+        detections = reader[inputs.source](snapshot.detections, frames)
+        _write_json(root / "mask.json", _mask_record(mask, removed))
+        manifest = _manifest(inputs, root, frames, code)
 
-    output.mkdir(parents=True, exist_ok=False)
-    try:
-        predictions_path = output / "predictions" / "data" / f"{inputs.sequence}.txt"
-        predictions_path.parent.mkdir(parents=True)
-        _write_frames(
-            tracker,
-            ((frame, detections[frame]) for frame in frames),
-            set(removed),
-            predictions_path,
-            output / "events.jsonl",
-        )
-        shutil.copyfile(inputs.config, output / "protocol.toml")
-        _write_json(output / "mask.json", _mask_record(mask, removed))
-        _write_json(
-            output / "manifest.json",
-            {
-                "method": method,
-                "sequence": inputs.sequence,
-                "source": inputs.source,
-                "seqmap": str(inputs.seqmap.resolve()),
-                "detections": str(inputs.detections.resolve()),
-                "first_frame": frames.start,
-                "last_frame": frames.stop - 1,
-                **({"ocsort_revision": OCSORT_REVISION} if method == "ocsort" else {}),
-            },
-        )
-    except BaseException:
-        shutil.rmtree(output)
-        raise
+        output.mkdir(parents=True, exist_ok=False)
+        try:
+            for selected in methods:
+                destination = output if method != "all" else output / selected
+                tracker = _create_tracker(selected, snapshot.config, ocsort_checkout)
+                predictions_path = (
+                    destination / "predictions" / "data" / f"{inputs.sequence}.txt"
+                )
+                predictions_path.parent.mkdir(parents=True)
+                _write_frames(
+                    tracker,
+                    ((frame, detections[frame]) for frame in frames),
+                    masked_frames,
+                    predictions_path,
+                    destination / "events.jsonl",
+                )
+                _write_context(destination, root, manifest, selected)
+            if method == "all":
+                _write_context(output, root, manifest, method)
+        except BaseException:
+            shutil.rmtree(output)
+            raise
+
+
+def _create_tracker(method: str, config: Path, ocsort_checkout: Path) -> Tracker:
+    lifecycle = load_sort_lifecycle(config)
+    if method == "ocsort":
+        return OCSortTracker(ocsort_checkout, load_ocsort(config), lifecycle)
+    return SortTracker(
+        load_sort_kalman(config),
+        lifecycle,
+        recovery=load_sort_recovery(config) if method == "sort-extra" else None,
+    )
+
+
+def _snapshot_inputs(inputs: RunInputs, root: Path) -> RunInputs:
+    snapshot = replace(
+        inputs,
+        config=root / "protocol.toml",
+        seqmap=root / "seqmap.txt",
+        detections=root / "detections.txt",
+    )
+    shutil.copyfile(inputs.config, snapshot.config)
+    shutil.copyfile(inputs.seqmap, snapshot.seqmap)
+    shutil.copyfile(inputs.detections, snapshot.detections)
+    return snapshot
+
+
+def _manifest(
+    inputs: RunInputs,
+    root: Path,
+    frames: range,
+    code: dict[str, str | bool | None],
+) -> dict[str, object]:
+    return {
+        "sequence": inputs.sequence,
+        "source": inputs.source,
+        "config": str(inputs.config.resolve()),
+        "seqmap": str(inputs.seqmap.resolve()),
+        "detections": str(inputs.detections.resolve()),
+        "first_frame": frames.start,
+        "last_frame": frames.stop - 1,
+        "git": code,
+        "versions": environment_versions(),
+        "input_sha256": {
+            "config": sha256_file(root / "protocol.toml"),
+            "seqmap": sha256_file(root / "seqmap.txt"),
+            "detections": sha256_file(root / "detections.txt"),
+        },
+        "mask_sha256": sha256_file(root / "mask.json"),
+    }
+
+
+def _write_context(
+    output: Path,
+    root: Path,
+    manifest: dict[str, object],
+    method: str,
+) -> None:
+    details = {"method": method, **manifest}
+    if method in ("ocsort", "all"):
+        details["ocsort_revision"] = OCSORT_REVISION
+    if method == "all":
+        details["methods"] = TRACKING_METHODS
+    for filename in ("protocol.toml", "mask.json"):
+        shutil.copyfile(root / filename, output / filename)
+    _write_json(output / "manifest.json", details)
 
 
 def _tune_frames(inputs: RunInputs) -> range:

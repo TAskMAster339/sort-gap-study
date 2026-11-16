@@ -8,7 +8,7 @@ from sort_gap_study.config import load_split
 from sort_gap_study.dataset import audit_inputs
 from sort_gap_study.evaluation import evaluate_sort
 from sort_gap_study.ocsort import DEFAULT_OCSORT_CHECKOUT
-from sort_gap_study.runner import MaskSpec, RunInputs, run_sort
+from sort_gap_study.runner import TRACKING_METHODS, MaskSpec, RunInputs, run_sort
 
 
 def main() -> None:
@@ -25,7 +25,7 @@ def main() -> None:
 
     run = commands.add_parser(
         "run-sort",
-        help="Запустить SORT на одном настроечном видео.",
+        help="Запустить трекеры на одном настроечном видео.",
     )
     run.add_argument("--config", type=Path, default=Path("configs/protocol.toml"))
     run.add_argument("--seqmap", type=Path, required=True)
@@ -33,7 +33,7 @@ def main() -> None:
     run.add_argument("--source", choices=("gt", "regionlet"), required=True)
     run.add_argument(
         "--method",
-        choices=("sort", "sort-extra", "ocsort"),
+        choices=(*TRACKING_METHODS, "all"),
         default="sort",
     )
     run.add_argument("--ocsort-checkout", type=Path, default=DEFAULT_OCSORT_CHECKOUT)

@@ -97,3 +97,66 @@ def test_can_retry_same_frame_after_invalid_input(tracker):
     assert tracker.step(1, _detection(), artificial_gap=False) == ()
     (confirmed,) = tracker.step(2, _detection(), artificial_gap=False)
     assert confirmed.track_id == 1
+
+
+def test_recovery_candidates_require_confirmation_fresh_observation_and_no_match(
+    tracker,
+):
+    first = _detection(0)
+    primary_match = _detection(40)
+    stale = _detection(80)
+    tentative = _detection(120)
+    for frame in range(3):
+        tracker.step(frame, first + primary_match + stale, artificial_gap=False)
+    tracker.step(3, first + primary_match + tentative, artificial_gap=False)
+
+    for frame in (4, 5):
+        tracker.step(frame, [], artificial_gap=True)
+        assert tracker.last_events.recovery_candidates == ()
+
+    tracker.step(6, primary_match + _detection(160), artificial_gap=False)
+    events = tracker.last_events
+    assert events.matched == ((2, 0),)
+    assert events.created == ((5, 1),)
+    assert events.recovery_candidates == (1,)
+
+    tracker.step(7, [], artificial_gap=False)
+    assert tracker.last_events.recovery_candidates == ()
+
+
+def test_available_empty_frame_ends_pause_and_later_gap_has_own_start(tracker):
+    for frame in range(3):
+        tracker.step(frame, _detection(), artificial_gap=False)
+
+    tracker.step(3, [], artificial_gap=False)
+    assert tracker.last_events.recovery_candidates == ()
+    tracker.step(4, [], artificial_gap=True)
+    tracker.step(5, [], artificial_gap=False)
+    assert tracker.last_events.recovery_candidates == ()
+
+    tracker.step(6, _detection(), artificial_gap=False)
+    tracker.step(7, [], artificial_gap=True)
+    tracker.step(8, [], artificial_gap=False)
+    assert tracker.last_events.recovery_candidates == (1,)
+    tracker.step(9, _detection(40), artificial_gap=False)
+    assert tracker.last_events.recovery_candidates == ()
+
+
+@pytest.mark.parametrize(
+    ("return_frame", "candidates", "removed"),
+    [(32, (1,), ()), (33, (), (1,))],
+)
+def test_recovery_candidates_use_age_at_first_available_frame(
+    tracker,
+    return_frame,
+    candidates,
+    removed,
+):
+    for frame in range(3):
+        tracker.step(frame, _detection(), artificial_gap=False)
+    for frame in range(3, return_frame):
+        tracker.step(frame, [], artificial_gap=True)
+    tracker.step(return_frame, _detection(40), artificial_gap=False)
+
+    assert tracker.last_events.recovery_candidates == candidates
+    assert tracker.last_events.removed == removed

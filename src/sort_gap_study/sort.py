@@ -24,11 +24,12 @@ class TrackEstimate:
 
 @dataclass(frozen=True)
 class FrameEvents:
-    """Пары (ID трека, индекс детекции) и ID удалённых треков."""
+    """Сопоставления, создание, удаление и кандидаты после паузы."""
 
     matched: tuple[tuple[int, int], ...] = ()
     created: tuple[tuple[int, int], ...] = ()
     removed: tuple[int, ...] = ()
+    recovery_candidates: tuple[int, ...] = ()
 
 
 @dataclass
@@ -53,6 +54,7 @@ class SortTracker:
         self._next_track_id = 1
         self._last_frame: int | None = None
         self._last_events = FrameEvents()
+        self._gap_start: int | None = None
 
     @property
     def last_events(self) -> FrameEvents:
@@ -91,6 +93,11 @@ class SortTracker:
         self._tracks = alive
 
         association = associate_iou(predictions, boxes)
+        recovery_indices = (
+            ()
+            if artificial_gap
+            else self._recovery_candidates(association.unmatched_tracks)
+        )
         matched = []
         for track_index, detection_index in association.matches:
             track = self._tracks[track_index]
@@ -106,7 +113,18 @@ class SortTracker:
             created.append((self._next_track_id, detection_index))
             self._next_track_id += 1
 
-        self._last_events = FrameEvents(tuple(matched), tuple(created), tuple(removed))
+        self._last_events = FrameEvents(
+            matched=tuple(matched),
+            created=tuple(created),
+            removed=tuple(removed),
+            recovery_candidates=tuple(
+                self._tracks[i].track_id for i in recovery_indices
+            ),
+        )
+        if not artificial_gap:
+            self._gap_start = None
+        elif self._gap_start is None:
+            self._gap_start = frame_index
         self._last_frame = frame_index
         return tuple(
             TrackEstimate(
@@ -116,6 +134,21 @@ class SortTracker:
             )
             for track in self._tracks
             if track.hits >= self._lifecycle.min_hits
+        )
+
+    def _recovery_candidates(
+        self,
+        unmatched_tracks: tuple[int, ...],
+    ) -> tuple[int, ...]:
+        """Отобрать индексы живых треков для второго назначения."""
+        if self._gap_start is None:
+            return ()
+        last_available = self._gap_start - 1
+        return tuple(
+            i
+            for i in unmatched_tracks
+            if self._tracks[i].hits >= self._lifecycle.min_hits
+            and self._tracks[i].last_observed_frame == last_available
         )
 
 

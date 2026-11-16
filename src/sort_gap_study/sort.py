@@ -22,6 +22,15 @@ class TrackEstimate:
     observed: bool
 
 
+@dataclass(frozen=True)
+class FrameEvents:
+    """Пары (ID трека, индекс детекции) и ID удалённых треков."""
+
+    matched: tuple[tuple[int, int], ...] = ()
+    created: tuple[tuple[int, int], ...] = ()
+    removed: tuple[int, ...] = ()
+
+
 @dataclass
 class _Track:
     track_id: int
@@ -43,6 +52,12 @@ class SortTracker:
         self._tracks: list[_Track] = []
         self._next_track_id = 1
         self._last_frame: int | None = None
+        self._last_events = FrameEvents()
+
+    @property
+    def last_events(self) -> FrameEvents:
+        """Вернуть события последнего обработанного кадра."""
+        return self._last_events
 
     def step(
         self,
@@ -63,28 +78,35 @@ class SortTracker:
         if artificial_gap and len(boxes):
             raise ValueError("Для искусственного пропуска требуется пустой массив.")
 
-        self._tracks = [
-            track
-            for track in self._tracks
-            if frame_index - track.last_observed_frame <= self._lifecycle.max_age
-        ]
+        alive = []
+        removed = []
         predictions = []
         for track in self._tracks:
+            if frame_index - track.last_observed_frame > self._lifecycle.max_age:
+                removed.append(track.track_id)
+                continue
+            alive.append(track)
             track.kalman.predict()
             predictions.append(track.kalman.bbox)
+        self._tracks = alive
 
         association = associate_iou(predictions, boxes)
+        matched = []
         for track_index, detection_index in association.matches:
             track = self._tracks[track_index]
             track.kalman.correct(boxes[detection_index])
             track.last_observed_frame = frame_index
             track.hits += 1
+            matched.append((track.track_id, detection_index))
 
+        created = []
         for detection_index in association.unmatched_detections:
             kalman = SortKalmanFilter(boxes[detection_index], self._kalman_config)
             self._tracks.append(_Track(self._next_track_id, kalman, frame_index))
+            created.append((self._next_track_id, detection_index))
             self._next_track_id += 1
 
+        self._last_events = FrameEvents(tuple(matched), tuple(created), tuple(removed))
         self._last_frame = frame_index
         return tuple(
             TrackEstimate(

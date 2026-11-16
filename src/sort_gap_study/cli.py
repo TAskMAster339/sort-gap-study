@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sort_gap_study.config import load_split
 from sort_gap_study.dataset import audit_inputs
+from sort_gap_study.runner import MaskSpec, RunInputs, run_sort
 
 
 def main() -> None:
@@ -19,6 +20,25 @@ def main() -> None:
     audit.add_argument("--seqmap", type=Path, required=True)
     audit.add_argument("--labels-dir", type=Path, required=True)
     audit.add_argument("--regionlet-dir", type=Path, required=True)
+
+    run = commands.add_parser(
+        "run-sort",
+        help="Запустить SORT на одном настроечном видео.",
+    )
+    run.add_argument("--config", type=Path, default=Path("configs/protocol.toml"))
+    run.add_argument("--seqmap", type=Path, required=True)
+    run.add_argument("--sequence", required=True)
+    run.add_argument("--source", choices=("gt", "regionlet"), required=True)
+    run.add_argument("--detections", type=Path, required=True)
+    run.add_argument("--output", type=Path, required=True)
+    run.add_argument(
+        "--mask",
+        choices=("uniform", "random", "burst"),
+        default="uniform",
+    )
+    run.add_argument("--loss-fraction", type=float, default=0.0)
+    run.add_argument("--seed", type=int, default=0)
+    run.add_argument("--series-length", type=int, default=3)
     args = parser.parse_args()
 
     if args.command == "audit-data":
@@ -29,3 +49,17 @@ def main() -> None:
             audit.error(str(error))
         total = len(split.tune) + len(split.evaluation)
         sys.stdout.write(f"Видео: {total}. Файлы GT и Regionlet: {2 * total}.\n")
+    elif args.command == "run-sort":
+        inputs = RunInputs(
+            args.config,
+            args.seqmap,
+            args.sequence,
+            args.source,
+            args.detections,
+        )
+        mask = MaskSpec(args.mask, args.loss_fraction, args.seed, args.series_length)
+        try:
+            run_sort(inputs, mask, args.output)
+        except (OSError, TypeError, ValueError) as error:
+            run.error(str(error))
+        sys.stdout.write(f"Результаты SORT: {args.output}\n")

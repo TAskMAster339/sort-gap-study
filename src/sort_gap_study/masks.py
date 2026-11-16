@@ -7,6 +7,8 @@ from typing import Literal
 
 import numpy as np
 
+WARMUP_FRAMES = 10
+
 
 def make_mask(
     frames: range,
@@ -14,7 +16,7 @@ def make_mask(
     kind: Literal["uniform", "random"],
     *,
     seed: int,
-    warmup: int = 10,
+    warmup: int = WARMUP_FRAMES,
 ) -> tuple[int, ...]:
     """Вернуть исходные номера пропущенных кадров по возрастанию."""
     evaluation, count = _evaluation_budget(frames, loss_fraction, warmup)
@@ -52,7 +54,7 @@ def make_burst_mask(
     *,
     series_length: int,
     seed: int,
-    warmup: int = 10,
+    warmup: int = WARMUP_FRAMES,
 ) -> BurstMask:
     """Разместить серии пропусков на исходной шкале кадров."""
     evaluation, count = _evaluation_budget(frames, loss_fraction, warmup)

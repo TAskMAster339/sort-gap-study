@@ -10,3 +10,7 @@ initial_covariance = [10, 10, 10, 10, 10000, 10000, 10000]
 process_noise = [1, 1, 1, 1, 0.01, 0.01, 0.0001]
 measurement_noise = [1, 1, 10, 10]
 bbox_epsilon = 1e-6
+
+[sort.lifecycle]
+min_hits = 3
+max_age = 30

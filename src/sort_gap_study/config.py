@@ -21,6 +21,30 @@ class SortKalmanConfig:
     bbox_epsilon: float
 
 
+@dataclass(frozen=True)
+class SortLifecycleConfig:
+    min_hits: int
+    max_age: int
+
+
+def load_sort_lifecycle(path: Path) -> SortLifecycleConfig:
+    """Загрузить условия подтверждения и удаления трека SORT."""
+    with path.open("rb") as file:
+        sort = tomllib.load(file).get("sort")
+
+    lifecycle = sort.get("lifecycle") if isinstance(sort, dict) else None
+    if not isinstance(lifecycle, dict):
+        raise TypeError("Ожидается таблица [sort.lifecycle].")
+
+    min_hits = lifecycle.get("min_hits")
+    max_age = lifecycle.get("max_age")
+    if type(min_hits) is not int or min_hits < 1:
+        raise ValueError("sort.lifecycle.min_hits: ожидается положительное целое.")
+    if type(max_age) is not int or max_age < 0:
+        raise ValueError("sort.lifecycle.max_age: ожидается неотрицательное целое.")
+    return SortLifecycleConfig(min_hits=min_hits, max_age=max_age)
+
+
 def load_sort_kalman(path: Path) -> SortKalmanConfig:
     """Загрузить диагонали ковариаций и нижнюю границу площади и пропорций."""
     with path.open("rb") as file:

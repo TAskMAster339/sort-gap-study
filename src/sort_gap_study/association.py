@@ -23,8 +23,8 @@ def pairwise_iou(
     detection_boxes: ArrayLike,
 ) -> NDArray[np.float64]:
     """Вычислить матрицу IoU для пар bbox в формате (x1, y1, x2, y2)."""
-    tracks = _boxes(track_boxes)
-    detections = _boxes(detection_boxes)
+    tracks = as_box_array(track_boxes)
+    detections = as_box_array(detection_boxes)
     track_size = tracks[:, 2:] - tracks[:, :2]
     detection_size = detections[:, 2:] - detections[:, :2]
 
@@ -68,7 +68,8 @@ def associate_iou(
     return Association(matches, unmatched_tracks, unmatched_detections)
 
 
-def _boxes(value: ArrayLike) -> NDArray[np.float64]:
+def as_box_array(value: ArrayLike) -> NDArray[np.float64]:
+    """Проверить геометрию боксов и представить их массивом (N, 4)."""
     boxes = np.asarray(value, dtype=np.float64)
     if boxes.shape == (0,):
         return boxes.reshape(0, _BBOX_COORDINATES)

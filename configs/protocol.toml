@@ -19,3 +19,8 @@ max_age = 30
 max_mahalanobis_squared = 9.21034
 max_center_shift = 2.0
 max_size_ratio = 2.0
+
+[ocsort]
+delta_t = 3
+inertia = 0.2
+iou_threshold = 0.3

@@ -12,6 +12,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from sort_gap_study.config import (
+    load_ocsort,
     load_sort_kalman,
     load_sort_lifecycle,
     load_sort_recovery,
@@ -24,7 +25,13 @@ from sort_gap_study.dataset import (
     read_seqmap,
 )
 from sort_gap_study.masks import WARMUP_FRAMES, make_burst_mask, make_mask
-from sort_gap_study.sort import SortTracker, TrackEstimate
+from sort_gap_study.ocsort import (
+    DEFAULT_OCSORT_CHECKOUT,
+    OCSORT_REVISION,
+    OCSortTracker,
+)
+from sort_gap_study.sort import SortTracker
+from sort_gap_study.tracker import Tracker, TrackEstimate
 
 
 @dataclass(frozen=True)
@@ -62,18 +69,26 @@ def run_sort(
     mask: MaskSpec,
     output: Path,
     *,
-    method: Literal["sort", "sort-extra"] = "sort",
+    method: Literal["sort", "sort-extra", "ocsort"] = "sort",
+    ocsort_checkout: Path = DEFAULT_OCSORT_CHECKOUT,
 ) -> None:
     """Обработать настроечное видео и сохранить результаты в новом каталоге."""
     frames = _tune_frames(inputs)
     removed = mask.removed_frames(frames)
     reader = {"gt": read_gt_detections, "regionlet": read_regionlet_detections}
     detections = reader[inputs.source](inputs.detections, frames)
-    tracker = SortTracker(
-        load_sort_kalman(inputs.config),
-        load_sort_lifecycle(inputs.config),
-        recovery=load_sort_recovery(inputs.config) if method == "sort-extra" else None,
-    )
+    lifecycle = load_sort_lifecycle(inputs.config)
+    tracker: Tracker
+    if method == "ocsort":
+        tracker = OCSortTracker(ocsort_checkout, load_ocsort(inputs.config), lifecycle)
+    else:
+        tracker = SortTracker(
+            load_sort_kalman(inputs.config),
+            lifecycle,
+            recovery=load_sort_recovery(inputs.config)
+            if method == "sort-extra"
+            else None,
+        )
 
     output.mkdir(parents=True, exist_ok=False)
     try:
@@ -98,6 +113,7 @@ def run_sort(
                 "detections": str(inputs.detections.resolve()),
                 "first_frame": frames.start,
                 "last_frame": frames.stop - 1,
+                **({"ocsort_revision": OCSORT_REVISION} if method == "ocsort" else {}),
             },
         )
     except BaseException:
@@ -115,7 +131,7 @@ def _tune_frames(inputs: RunInputs) -> range:
 
 
 def _write_frames(
-    tracker: SortTracker,
+    tracker: Tracker,
     frame_detections: Iterable[tuple[int, NDArray[np.float64]]],
     removed: set[int],
     predictions_path: Path,

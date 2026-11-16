@@ -16,6 +16,17 @@ uv run --locked sort-gap-study run-sort \
 Параметр `--method sort-extra` включает второе сопоставление после искусственных
 пропусков. По умолчанию используется базовый SORT (`--method sort`).
 
+Для OC-SORT подготовьте локальную копию репозитория.
+
+```bash
+git clone --no-checkout https://github.com/noahcao/OC_SORT.git external/OC_SORT
+git -C external/OC_SORT checkout --detach 8462e7e729a93ccd3bd995c0a79a890336cb3a0b
+```
+
+Добавьте `--method ocsort` к команде `run-sort`. Путь к другой локальной копии
+можно передать через `--ocsort-checkout`. Локальная копия в `external/OC_SORT`
+также нужна для тестов `tests/test_ocsort.py`.
+
 - `predictions/data/0000.txt` содержит оценки подтверждённых треков в формате
   KITTI Tracking, включая прогнозы на кадрах без наблюдений и оценки на кадрах прогрева.
 - `events.jsonl` содержит по одной записи на исходный кадр. `artificial_gap`

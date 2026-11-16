@@ -2,13 +2,10 @@
 
 import csv
 import json
-import subprocess
 import sys
-import tarfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from importlib import import_module
-from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType
@@ -17,6 +14,7 @@ import numpy as np
 
 from sort_gap_study.config import load_split
 from sort_gap_study.masks import WARMUP_FRAMES
+from sort_gap_study.upstream import extract_revision
 
 TRACKEVAL_REVISION = "12c8791b303e0a0b50f753af204249e622d0281a"
 _NUMPY_ALIASES = {"float": float, "int": int, "bool": bool}
@@ -155,21 +153,7 @@ class _TrackEvalNumpy:
 
 @contextmanager
 def _pinned_trackeval(checkout: Path, root: Path) -> Iterator[str]:
-    if not checkout.is_dir():
-        raise FileNotFoundError(f"Копия репозитория TrackEval отсутствует: {checkout}.")
-    archive = subprocess.run(  # noqa: S603 — fixed command and revision
-        ["git", "-C", str(checkout), "archive", TRACKEVAL_REVISION, "trackeval"],  # noqa: S607
-        check=False,
-        capture_output=True,
-    )
-    if archive.returncode:
-        details = archive.stderr.decode(errors="replace").strip()
-        raise ValueError(
-            f"Ревизия TrackEval {TRACKEVAL_REVISION} недоступна. {details}",
-        )
-    with tarfile.open(fileobj=BytesIO(archive.stdout)) as source:
-        source.extractall(root, filter="data")
-
+    extract_revision(checkout, TRACKEVAL_REVISION, "trackeval", root)
     package = "_trackeval_" + root.name.replace("-", "_")
     source_dir = root / "trackeval"
     try:

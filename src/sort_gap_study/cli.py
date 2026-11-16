@@ -7,6 +7,7 @@ from pathlib import Path
 from sort_gap_study.config import load_split
 from sort_gap_study.dataset import audit_inputs
 from sort_gap_study.evaluation import evaluate_sort
+from sort_gap_study.ocsort import DEFAULT_OCSORT_CHECKOUT
 from sort_gap_study.runner import MaskSpec, RunInputs, run_sort
 
 
@@ -30,7 +31,12 @@ def main() -> None:
     run.add_argument("--seqmap", type=Path, required=True)
     run.add_argument("--sequence", required=True)
     run.add_argument("--source", choices=("gt", "regionlet"), required=True)
-    run.add_argument("--method", choices=("sort", "sort-extra"), default="sort")
+    run.add_argument(
+        "--method",
+        choices=("sort", "sort-extra", "ocsort"),
+        default="sort",
+    )
+    run.add_argument("--ocsort-checkout", type=Path, default=DEFAULT_OCSORT_CHECKOUT)
     run.add_argument("--detections", type=Path, required=True)
     run.add_argument("--output", type=Path, required=True)
     run.add_argument(
@@ -69,8 +75,14 @@ def main() -> None:
         )
         mask = MaskSpec(args.mask, args.loss_fraction, args.seed, args.series_length)
         try:
-            run_sort(inputs, mask, args.output, method=args.method)
-        except (OSError, TypeError, ValueError) as error:
+            run_sort(
+                inputs,
+                mask,
+                args.output,
+                method=args.method,
+                ocsort_checkout=args.ocsort_checkout,
+            )
+        except (ImportError, OSError, TypeError, ValueError) as error:
             run.error(str(error))
         sys.stdout.write(f"Результаты SORT: {args.output}\n")
     elif args.command == "evaluate-sort":

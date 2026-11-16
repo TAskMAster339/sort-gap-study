@@ -1,12 +1,11 @@
 """Покадровый трекер на основе базового SORT."""
 
 from dataclasses import dataclass
-from operator import index
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-from sort_gap_study.association import as_box_array, assign_costs, associate_iou
+from sort_gap_study.association import assign_costs, associate_iou
 from sort_gap_study.config import (
     SortKalmanConfig,
     SortLifecycleConfig,
@@ -14,28 +13,7 @@ from sort_gap_study.config import (
 )
 from sort_gap_study.kalman import SortKalmanFilter
 from sort_gap_study.recovery import recovery_costs
-
-_DETECTION_COLUMNS = 5
-
-
-@dataclass(frozen=True)
-class TrackEstimate:
-    """Оценка подтверждённого трека на текущем кадре."""
-
-    track_id: int
-    bbox: tuple[float, float, float, float]
-    observed: bool
-
-
-@dataclass(frozen=True)
-class FrameEvents:
-    """Сопоставления, создание, удаление и кандидаты после паузы."""
-
-    matched: tuple[tuple[int, int], ...] = ()
-    created: tuple[tuple[int, int], ...] = ()
-    removed: tuple[int, ...] = ()
-    recovery_candidates: tuple[int, ...] = ()
-    recovery_matches: tuple[tuple[int, int], ...] = ()
+from sort_gap_study.tracker import FrameEvents, TrackEstimate, validate_step
 
 
 @dataclass
@@ -78,16 +56,13 @@ class SortTracker:
         artificial_gap: bool,
     ) -> tuple[TrackEstimate, ...]:
         """Обработать (x1, y1, x2, y2, score) и вернуть оценки по порядку ID."""
-        frame_index = index(frame_index)
-        if frame_index < 0 or (
-            self._last_frame is not None and frame_index != self._last_frame + 1
-        ):
-            raise ValueError(
-                "Кадры должны идти подряд. Начальный индекс неотрицателен.",
-            )
-        boxes = _detection_boxes(detections)
-        if artificial_gap and len(boxes):
-            raise ValueError("Для искусственного пропуска требуется пустой массив.")
+        frame_index, rows = validate_step(
+            frame_index,
+            self._last_frame,
+            detections,
+            artificial_gap=artificial_gap,
+        )
+        boxes = rows[:, :-1]
 
         alive = []
         removed = []
@@ -197,14 +172,3 @@ class SortTracker:
             if self._tracks[i].hits >= self._lifecycle.min_hits
             and self._tracks[i].last_observed_frame == last_available
         )
-
-
-def _detection_boxes(detections: ArrayLike) -> NDArray[np.float64]:
-    rows = np.asarray(detections, dtype=np.float64)
-    if rows.shape == (0,):
-        rows = rows.reshape(0, _DETECTION_COLUMNS)
-    if rows.shape[1:] != (_DETECTION_COLUMNS,):
-        raise ValueError("Ожидается массив детекций размера (N, 5).")
-    if not np.isfinite(rows[:, -1]).all():
-        raise ValueError("Оценки уверенности детекций должны быть конечными.")
-    return as_box_array(rows[:, :-1])

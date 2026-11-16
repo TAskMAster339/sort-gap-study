@@ -34,6 +34,33 @@ class SortRecoveryConfig:
     max_size_ratio: float
 
 
+@dataclass(frozen=True)
+class OCSortConfig:
+    delta_t: int
+    inertia: float
+    iou_threshold: float
+
+
+def load_ocsort(path: Path) -> OCSortConfig:
+    """Загрузить параметры ассоциации OC-SORT."""
+    with path.open("rb") as file:
+        config = tomllib.load(file).get("ocsort")
+    if not isinstance(config, dict):
+        raise TypeError("Ожидается таблица [ocsort].")
+
+    delta_t = config.get("delta_t")
+    if type(delta_t) is not int or delta_t < 1:
+        raise ValueError("ocsort.delta_t: ожидается положительное целое.")
+    inertia = _positive_number(config.get("inertia"), "ocsort.inertia")
+    iou_threshold = _positive_number(
+        config.get("iou_threshold"),
+        "ocsort.iou_threshold",
+    )
+    if iou_threshold > 1:
+        raise ValueError("ocsort.iou_threshold: допустимы значения до единицы.")
+    return OCSortConfig(delta_t, inertia, iou_threshold)
+
+
 def load_sort_recovery(path: Path) -> SortRecoveryConfig:
     """Загрузить пороги второго назначения."""
     with path.open("rb") as file:

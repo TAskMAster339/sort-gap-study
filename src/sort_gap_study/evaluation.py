@@ -16,7 +16,10 @@ from sort_gap_study.config import load_split
 from sort_gap_study.masks import WARMUP_FRAMES
 from sort_gap_study.upstream import extract_revision
 
+DEFAULT_TRACKEVAL_CHECKOUT = Path("external/TrackEval")
+
 TRACKEVAL_REVISION = "12c8791b303e0a0b50f753af204249e622d0281a"
+TRACKEVAL_SUBTREE = "trackeval"
 _NUMPY_ALIASES = {"float": float, "int": int, "bool": bool}
 
 
@@ -157,9 +160,9 @@ class _TrackEvalNumpy:
 
 @contextmanager
 def _pinned_trackeval(checkout: Path, root: Path) -> Iterator[str]:
-    extract_revision(checkout, TRACKEVAL_REVISION, "trackeval", root)
+    extract_revision(checkout, TRACKEVAL_REVISION, TRACKEVAL_SUBTREE, root)
     package = "_trackeval_" + root.name.replace("-", "_")
-    source_dir = root / "trackeval"
+    source_dir = root / TRACKEVAL_SUBTREE
     try:
         # Load the KITTI and metric modules without importing unrelated datasets.
         for name, folder in (

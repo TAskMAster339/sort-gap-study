@@ -6,11 +6,21 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from platform import python_version
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 
 def environment_versions() -> dict[str, str | None]:
-    """Записать версии библиотек, используемых трекерами."""
+    """Записать версии основных библиотек эксперимента."""
     versions: dict[str, str | None] = {"python": python_version()}
-    for name in ("sort-gap-study", "numpy", "scipy", "filterpy", "lap"):
+    for name in (
+        "sort-gap-study",
+        "numpy",
+        "scipy",
+        "filterpy",
+        "lap",
+        "pandas",
+        "matplotlib",
+    ):
         try:
             versions[name] = version(name)
         except PackageNotFoundError:
@@ -20,12 +30,14 @@ def environment_versions() -> dict[str, str | None]:
 
 def git_state() -> dict[str, str | bool | None]:
     """Определить коммит исходников, из которых запущен пакет."""
-    project = Path(__file__).resolve().parents[2]
+    project = PROJECT_ROOT
     if not (project / ".git").exists():
         return {"commit": None, "dirty": None}
     return {
         "commit": _git(project, "rev-parse", "HEAD").strip(),
-        "dirty": bool(_git(project, "status", "--porcelain")),
+        "dirty": bool(
+            _git(project, "status", "--porcelain=v1", "--untracked-files=all"),
+        ),
     }
 
 

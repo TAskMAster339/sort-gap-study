@@ -6,7 +6,8 @@ from pathlib import Path
 
 from sort_gap_study.config import load_split
 from sort_gap_study.dataset import audit_inputs
-from sort_gap_study.evaluation import evaluate_sort
+from sort_gap_study.evaluation import DEFAULT_TRACKEVAL_CHECKOUT, evaluate_sort
+from sort_gap_study.freeze import ProtocolInputs, freeze_protocol, verify_protocol
 from sort_gap_study.ocsort import DEFAULT_OCSORT_CHECKOUT
 from sort_gap_study.runner import TRACKING_METHODS, MaskSpec, RunInputs, run_sort
 
@@ -18,10 +19,8 @@ def main() -> None:
     )
     commands = parser.add_subparsers(dest="command")
     audit = commands.add_parser("audit-data", help="Проверить входные файлы KITTI.")
-    audit.add_argument("--config", type=Path, default=Path("configs/protocol.toml"))
-    audit.add_argument("--seqmap", type=Path, required=True)
-    audit.add_argument("--labels-dir", type=Path, required=True)
-    audit.add_argument("--regionlet-dir", type=Path, required=True)
+    _add_data_arguments(audit)
+    protocol_commands = _add_protocol_commands(commands)
 
     run = commands.add_parser(
         "run-sort",
@@ -35,7 +34,7 @@ def main() -> None:
     )
     evaluate.add_argument("--run", type=Path, required=True)
     evaluate.add_argument("--ground-truth", type=Path, required=True)
-    evaluate.add_argument("--trackeval", type=Path, default=Path("external/TrackEval"))
+    evaluate.add_argument("--trackeval", type=Path, default=DEFAULT_TRACKEVAL_CHECKOUT)
 
     summary = commands.add_parser(
         "summarize-pilot",
@@ -68,6 +67,8 @@ def main() -> None:
             audit.error(str(error))
         total = len(split.tune) + len(split.evaluation)
         sys.stdout.write(f"Видео: {total}. Файлы GT и Regionlet: {2 * total}.\n")
+    elif args.command in protocol_commands:
+        _run_protocol_check(args, protocol_commands[args.command])
     elif args.command == "run-sort":
         inputs = RunInputs(
             args.config,
@@ -104,6 +105,61 @@ def main() -> None:
                 "adjust-holm": holm,
             }[args.command],
         )
+
+
+def _add_data_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--config", type=Path, default=Path("configs/protocol.toml"))
+    parser.add_argument("--seqmap", type=Path, required=True)
+    parser.add_argument("--labels-dir", type=Path, required=True)
+    parser.add_argument("--regionlet-dir", type=Path, required=True)
+
+
+def _add_protocol_commands(commands):
+    descriptions = {
+        "freeze-protocol": "Зафиксировать состояние итогового эксперимента.",
+        "verify-protocol": "Проверить фиксацию перед итоговым запуском.",
+    }
+    parsers = {}
+    for name, description in descriptions.items():
+        parser = commands.add_parser(name, help=description)
+        _add_data_arguments(parser)
+        parser.add_argument("--manifest", type=Path, required=True)
+        parser.add_argument(
+            "--ocsort-checkout",
+            type=Path,
+            default=DEFAULT_OCSORT_CHECKOUT,
+        )
+        parser.add_argument(
+            "--trackeval",
+            type=Path,
+            default=DEFAULT_TRACKEVAL_CHECKOUT,
+        )
+        parsers[name] = parser
+    return parsers
+
+
+def _run_protocol_check(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> None:
+    inputs = ProtocolInputs(
+        config=args.config,
+        seqmap=args.seqmap,
+        labels_dir=args.labels_dir,
+        regionlet_dir=args.regionlet_dir,
+        ocsort_checkout=args.ocsort_checkout,
+        trackeval_checkout=args.trackeval,
+    )
+    try:
+        if args.command == "freeze-protocol":
+            freeze_protocol(inputs, args.manifest)
+            message = "Протокол зафиксирован"
+        else:
+            verify_protocol(inputs, args.manifest)
+            message = "Фиксация проверена"
+    except (OSError, TypeError, ValueError) as error:
+        parser.error(str(error))
+    sys.stdout.write(f"{message}: {args.manifest}\n")
 
 
 def _run_analysis(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:

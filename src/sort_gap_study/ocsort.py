@@ -16,7 +16,7 @@ from sort_gap_study.upstream import extract_revision
 
 OCSORT_REVISION = "8462e7e729a93ccd3bd995c0a79a890336cb3a0b"
 DEFAULT_OCSORT_CHECKOUT = Path("external/OC_SORT")
-_UPSTREAM_PATH = "trackers/ocsort_tracker"
+OCSORT_SUBTREE = "trackers/ocsort_tracker"
 
 
 class OCSortTracker:
@@ -110,10 +110,10 @@ def _load_upstream(checkout: Path) -> ModuleType:
     # Each adapter has its own upstream class counter, including concurrent videos.
     with TemporaryDirectory(prefix="sort-gap-ocsort-") as directory:
         root = Path(directory)
-        extract_revision(checkout, OCSORT_REVISION, _UPSTREAM_PATH, root)
+        extract_revision(checkout, OCSORT_REVISION, OCSORT_SUBTREE, root)
         name = "_" + root.name.replace("-", "_")
         package = ModuleType(name)
-        package.__path__ = [str(root / _UPSTREAM_PATH)]
+        package.__path__ = [str(root / OCSORT_SUBTREE)]
         sys.modules[name] = package
         try:
             upstream = import_module(".ocsort", name)

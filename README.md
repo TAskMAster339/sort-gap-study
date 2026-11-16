@@ -76,3 +76,18 @@ uv run --locked sort-gap-study evaluate-sort \
 `status=no_ground_truth` и оставляется пустое поле RFP.
 
 Локальная копия TrackEval также нужна для запуска тестов `tests/test_evaluation.py`.
+
+## Сводка пилота
+
+```bash
+uv run --locked sort-gap-study summarize-pilot \
+  --metrics runs/pilot-tune-5.1/metrics.csv \
+  --output runs/pilot-summary-5.3
+```
+
+Команда сохраняет `by-video.csv` со средними по реализациям маски внутри
+каждого видео и `summary.csv` со средними по видео с равными весами.
+GT и Regionlet рассчитываются отдельно. Видео с `NGT=0` остаются
+в исходной таблице и исключаются из сводки.
+`idf1.png` показывает IDF1 в процентах, `fp.png` — среднее число ложных
+срабатываний на видео.

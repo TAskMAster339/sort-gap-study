@@ -27,26 +27,7 @@ def main() -> None:
         "run-sort",
         help="Запустить трекеры на одном настроечном видео.",
     )
-    run.add_argument("--config", type=Path, default=Path("configs/protocol.toml"))
-    run.add_argument("--seqmap", type=Path, required=True)
-    run.add_argument("--sequence", required=True)
-    run.add_argument("--source", choices=("gt", "regionlet"), required=True)
-    run.add_argument(
-        "--method",
-        choices=(*TRACKING_METHODS, "all"),
-        default="sort",
-    )
-    run.add_argument("--ocsort-checkout", type=Path, default=DEFAULT_OCSORT_CHECKOUT)
-    run.add_argument("--detections", type=Path, required=True)
-    run.add_argument("--output", type=Path, required=True)
-    run.add_argument(
-        "--mask",
-        choices=("uniform", "random", "burst"),
-        default="uniform",
-    )
-    run.add_argument("--loss-fraction", type=float, default=0.0)
-    run.add_argument("--seed", type=int, default=0)
-    run.add_argument("--series-length", type=int, default=3)
+    _add_run_arguments(run)
 
     evaluate = commands.add_parser(
         "evaluate-sort",
@@ -55,6 +36,13 @@ def main() -> None:
     evaluate.add_argument("--run", type=Path, required=True)
     evaluate.add_argument("--ground-truth", type=Path, required=True)
     evaluate.add_argument("--trackeval", type=Path, default=Path("external/TrackEval"))
+
+    summary = commands.add_parser(
+        "summarize-pilot",
+        help="Построить сводные таблицы и графики IDF1 и FP.",
+    )
+    summary.add_argument("--metrics", type=Path, required=True)
+    summary.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
     if args.command == "audit-data":
@@ -91,3 +79,34 @@ def main() -> None:
         except (ImportError, KeyError, OSError, TypeError, ValueError) as error:
             evaluate.error(str(error))
         sys.stdout.write(f"Метрики SORT: {metrics}\n")
+    elif args.command == "summarize-pilot":
+        from sort_gap_study.summary import summarize_pilot  # noqa: PLC0415 — plotting dependencies
+
+        try:
+            summarize_pilot(args.metrics, args.output)
+        except (OSError, TypeError, ValueError) as error:
+            summary.error(str(error))
+        sys.stdout.write(f"Таблицы и графики: {args.output}\n")
+
+
+def _add_run_arguments(run: argparse.ArgumentParser) -> None:
+    run.add_argument("--config", type=Path, default=Path("configs/protocol.toml"))
+    run.add_argument("--seqmap", type=Path, required=True)
+    run.add_argument("--sequence", required=True)
+    run.add_argument("--source", choices=("gt", "regionlet"), required=True)
+    run.add_argument(
+        "--method",
+        choices=(*TRACKING_METHODS, "all"),
+        default="sort",
+    )
+    run.add_argument("--ocsort-checkout", type=Path, default=DEFAULT_OCSORT_CHECKOUT)
+    run.add_argument("--detections", type=Path, required=True)
+    run.add_argument("--output", type=Path, required=True)
+    run.add_argument(
+        "--mask",
+        choices=("uniform", "random", "burst"),
+        default="uniform",
+    )
+    run.add_argument("--loss-fraction", type=float, default=0.0)
+    run.add_argument("--seed", type=int, default=0)
+    run.add_argument("--series-length", type=int, default=3)

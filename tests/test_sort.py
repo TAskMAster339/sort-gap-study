@@ -21,6 +21,15 @@ def tracker(protocol):
     return SortTracker(load_sort_kalman(protocol), load_sort_lifecycle(protocol))
 
 
+@pytest.fixture
+def extra_tracker(protocol):
+    return SortTracker(
+        load_sort_kalman(protocol),
+        load_sort_lifecycle(protocol),
+        recovery=load_sort_recovery(protocol),
+    )
+
+
 def _detection(offset=0):
     return [[offset, 0, offset + 10, 10, 1]]
 
@@ -170,20 +179,17 @@ def test_recovery_candidates_use_age_at_first_available_frame(
     assert tracker.last_events.removed == removed
 
 
-def test_extra_association_uses_remaining_detections_before_track_creation(protocol):
-    tracker = SortTracker(
-        load_sort_kalman(protocol),
-        load_sort_lifecycle(protocol),
-        recovery=load_sort_recovery(protocol),
-    )
+def test_extra_association_uses_remaining_detections_before_track_creation(
+    extra_tracker,
+):
     for frame in range(3):
-        tracker.step(frame, _detection() + _detection(40), artificial_gap=False)
+        extra_tracker.step(frame, _detection() + _detection(40), artificial_gap=False)
     for frame in range(3, 6):
-        estimates_during_gap = tracker.step(frame, [], artificial_gap=True)
+        estimates_during_gap = extra_tracker.step(frame, [], artificial_gap=True)
 
     detections = _detection(100) + _detection(40) + _detection(10)
-    estimates = tracker.step(6, detections, artificial_gap=False)
-    events = tracker.last_events
+    estimates = extra_tracker.step(6, detections, artificial_gap=False)
+    events = extra_tracker.last_events
 
     assert events.recovery_candidates == (1,)
     assert events.matched == ((2, 1), (1, 2))
@@ -193,3 +199,75 @@ def test_extra_association_uses_remaining_detections_before_track_creation(proto
     assert all(estimate.observed for estimate in estimates)
     assert estimates[0].bbox[0] > estimates_during_gap[0].bbox[0]
     assert estimates_during_gap[0].bbox == (0, 0, 10, 10)
+
+
+def test_sort_modes_agree_without_artificial_gaps(tracker, extra_tracker):
+    frames = [
+        _detection() + _detection(40),
+        _detection(41) + _detection(1),
+        _detection(2) + _detection(42),
+        [],
+        _detection(4) + _detection(54),
+        _detection(5) + _detection(55),
+        _detection(56) + _detection(6),
+    ]
+    for frame, detections in enumerate(frames):
+        basic_estimates = tracker.step(frame, detections, artificial_gap=False)
+        extra_estimates = extra_tracker.step(frame, detections, artificial_gap=False)
+        assert basic_estimates == extra_estimates
+        assert tracker.last_events == extra_tracker.last_events
+        assert extra_tracker.last_events.recovery_matches == ()
+
+
+@pytest.mark.parametrize(
+    ("gap_at_frame_six", "recovery_matches", "created"),
+    [(True, ((1, 0),), ()), (False, (), ((2, 0),))],
+    ids=["first_available", "after_available_empty_frame"],
+)
+def test_extra_assignment_only_on_first_available_frame(
+    extra_tracker,
+    gap_at_frame_six,
+    recovery_matches,
+    created,
+):
+    for frame in range(3):
+        extra_tracker.step(frame, _detection(), artificial_gap=False)
+    for frame in range(3, 6):
+        extra_tracker.step(frame, [], artificial_gap=True)
+        assert extra_tracker.last_events.recovery_matches == ()
+    extra_tracker.step(6, [], artificial_gap=gap_at_frame_six)
+    assert extra_tracker.last_events.recovery_matches == ()
+
+    extra_tracker.step(7, _detection(10), artificial_gap=False)
+    assert extra_tracker.last_events.recovery_matches == recovery_matches
+    assert extra_tracker.last_events.created == created
+
+
+@pytest.mark.parametrize(
+    ("return_frame", "recovery_matches", "removed", "created"),
+    [(32, ((1, 0),), (), ()), (33, (), (1,), ((2, 0),))],
+    ids=["age_30", "age_31"],
+)
+def test_extra_assignment_respects_max_age(
+    extra_tracker,
+    return_frame,
+    recovery_matches,
+    removed,
+    created,
+):
+    for frame in range(3):
+        extra_tracker.step(frame, _detection(), artificial_gap=False)
+    for frame in range(3, return_frame):
+        (prediction,) = extra_tracker.step(frame, [], artificial_gap=True)
+        assert prediction.track_id == 1
+        assert not prediction.observed
+
+    estimates = extra_tracker.step(return_frame, _detection(10), artificial_gap=False)
+    events = extra_tracker.last_events
+
+    assert events.recovery_matches == recovery_matches
+    assert events.removed == removed
+    assert events.created == created
+    assert [(item.track_id, item.observed) for item in estimates] == [
+        (track_id, True) for track_id, _ in recovery_matches
+    ]
